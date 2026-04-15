@@ -151,7 +151,7 @@ class SignalingClient {
 const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
 const wsHost = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
     ? 'localhost:8080' 
-    : 'https://sharedrop-p2p.onrender.com'; // REPLACE THIS with your actual Render/Koyeb URL
+    : 'sharedrop-p2p.onrender.com'; // REPLACE THIS with your actual Render/Koyeb URL
 
 // Export a singleton instance globally
 window.signaling = new SignalingClient(`${wsProtocol}//${wsHost}/signal`);
