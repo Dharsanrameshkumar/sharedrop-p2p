@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Share files directly between browsers with no server storage. Peer-to-peer, encrypted, and ephemeral.">
+
+    <title>ShareDrop — Ephemeral P2P File Sharing</title>
+
+    <!-- Favicon (inline SVG as data URI) -->
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚡</text></svg>">
+
+    <!-- Styles -->
+    <link rel="stylesheet" href="css/style.css">
+</head>
+
+<body>
+    <div class="app-container">
+
+        <!-- ═══ Header ═══════════════════════════════════════════ -->
+        <header class="app-header">
+            <a class="app-logo" id="logo-home-link" title="Back to home">
+                <div class="logo-icon">⚡</div>
+                <span class="logo-text">ShareDrop</span>
+            </a>
+            <div class="header-badge">
+                <span class="dot"></span>
+                End-to-End Encrypted
+            </div>
+        </header>
+
+        <!-- ═══ Main Content ═════════════════════════════════════ -->
+        <main class="app-main">
+
+            <!-- ── HOME VIEW ─────────────────────────────────── -->
+            <section class="view active" id="view-home">
+                <div class="home-hero">
+                    <div class="hero-icon">⚡</div>
+                    <h1>
+                        Share files<br>
+                        <span class="gradient-text">peer-to-peer</span>
+                    </h1>
+                    <p class="subtitle">
+                        Send files directly between browsers. No servers, no sign-ups, no storage. 
+                        Just a direct encrypted connection.
+                    </p>
+                </div>
+
+                <div class="action-cards">
+                    <div class="action-card send-card" id="btn-go-send" tabindex="0" role="button" aria-label="Send a file">
+                        <div class="card-icon">📤</div>
+                        <h3>Send a File</h3>
+                        <p>Select a file and get a share code for your receiver</p>
+                    </div>
+                    <div class="action-card receive-card" id="btn-go-receive" tabindex="0" role="button" aria-label="Receive a file">
+                        <div class="card-icon">📥</div>
+                        <h3>Receive a File</h3>
+                        <p>Enter a share code to connect and download</p>
+                    </div>
+                </div>
+
+                <div class="trust-strip">
+                    <div class="trust-item">
+                        <span class="icon">🔒</span>
+                        <span>Encrypted Transfer</span>
+                    </div>
+                    <div class="trust-item">
+                        <span class="icon">🚫</span>
+                        <span>No Server Storage</span>
+                    </div>
+                    <div class="trust-item">
+                        <span class="icon">👤</span>
+                        <span>No Login Required</span>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ── SEND VIEW ─────────────────────────────────── -->
+            <section class="view" id="view-send">
+                <button class="btn-back" id="btn-back-send">
+                    ← Back
+                </button>
+
+                <div class="section-header">
+                    <h2>Send a File</h2>
+                    <p>Select a file to share (max 1 GB)</p>
+                </div>
+
+                <!-- Steps -->
+                <div class="steps" id="send-steps">
+                    <div class="step active" data-step="1">
+                        <span class="step-number">1</span>
+                        Select File
+                    </div>
+                    <div class="step-divider"></div>
+                    <div class="step" data-step="2">
+                        <span class="step-number">2</span>
+                        Share Code
+                    </div>
+                    <div class="step-divider"></div>
+                    <div class="step" data-step="3">
+                        <span class="step-number">3</span>
+                        Transfer
+                    </div>
+                </div>
+
+                <!-- Step 1: File Selection -->
+                <div class="drop-zone" id="drop-zone">
+                    <div class="drop-icon">📁</div>
+                    <div class="drop-text">Drag & drop your file here</div>
+                    <div class="drop-subtext">or <span>click to browse</span> · Max 1 GB</div>
+                    <input type="file" id="file-input">
+                </div>
+
+                <!-- File Info -->
+                <div class="file-info" id="file-info">
+                    <div class="file-info-row">
+                        <div class="file-icon" id="file-type-icon">📄</div>
+                        <div class="file-details">
+                            <div class="file-name" id="file-name">—</div>
+                            <div class="file-meta">
+                                <span id="file-size">—</span>
+                                <span id="file-type">—</span>
+                            </div>
+                        </div>
+                        <button class="file-remove" id="btn-remove-file" title="Remove file">✕</button>
+                    </div>
+                </div>
+
+                <!-- Create Room Button -->
+                <button class="btn btn-primary btn-full btn-lg" id="btn-create-room" disabled>
+                    Create Share Link
+                </button>
+
+                <!-- Step 2: Room Code -->
+                <div class="room-code-section" id="room-code-section">
+                    <div class="room-code-label">Share this code with the receiver</div>
+                    <div class="room-code-display">
+                        <span class="room-code-value" id="room-code-value">—</span>
+                        <button class="btn-copy" id="btn-copy-code" title="Copy code">📋</button>
+                    </div>
+                    <div class="room-code-hint">Waiting for receiver to connect...</div>
+                </div>
+
+                <!-- Connection Status -->
+                <div class="connection-status" id="send-connection-status">
+                    <span class="status-dot"></span>
+                    <span class="status-text">—</span>
+                </div>
+
+                <!-- Step 3: Transfer Progress -->
+                <div class="transfer-section" id="send-transfer">
+                    <div class="progress-container">
+                        <div class="progress-header">
+                            <span class="progress-label">Sending file...</span>
+                            <span class="progress-percent" id="send-progress-percent">0%</span>
+                        </div>
+                        <div class="progress-bar">
+                            <div class="progress-fill" id="send-progress-fill"></div>
+                        </div>
+                    </div>
+                    <div class="transfer-stats">
+                        <div class="stat">
+                            <div class="stat-value" id="send-speed">—</div>
+                            <div class="stat-label">Speed</div>
+                        </div>
+                        <div class="stat">
+                            <div class="stat-value" id="send-transferred">—</div>
+                            <div class="stat-label">Sent</div>
+                        </div>
+                        <div class="stat">
+                            <div class="stat-value" id="send-eta">—</div>
+                            <div class="stat-label">ETA</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Transfer Complete -->
+                <div class="transfer-complete" id="send-complete">
+                    <div class="complete-icon">✓</div>
+                    <div class="complete-title">File Sent!</div>
+                    <div class="complete-subtitle">Your file has been successfully delivered.</div>
+                    <button class="btn btn-secondary btn-lg" id="btn-send-another">
+                        Send Another File
+                    </button>
+                </div>
+            </section>
+
+            <!-- ── RECEIVE VIEW ──────────────────────────────── -->
+            <section class="view" id="view-receive">
+                <button class="btn-back" id="btn-back-receive">
+                    ← Back
+                </button>
+
+                <div class="section-header">
+                    <h2>Receive a File</h2>
+                    <p>Enter the 5-character code from the sender</p>
+                </div>
+
+                <!-- Room Code Input -->
+                <div class="room-code-input-group" id="room-code-inputs">
+                    <input type="text" maxlength="1" data-index="0" placeholder="·" autocomplete="off" aria-label="Code digit 1">
+                    <input type="text" maxlength="1" data-index="1" placeholder="·" autocomplete="off" aria-label="Code digit 2">
+                    <input type="text" maxlength="1" data-index="2" placeholder="·" autocomplete="off" aria-label="Code digit 3">
+                    <input type="text" maxlength="1" data-index="3" placeholder="·" autocomplete="off" aria-label="Code digit 4">
+                    <input type="text" maxlength="1" data-index="4" placeholder="·" autocomplete="off" aria-label="Code digit 5">
+                </div>
+
+                <!-- Connect Button -->
+                <button class="btn btn-primary btn-full btn-lg" id="btn-join-room" disabled>
+                    Connect to Sender
+                </button>
+
+                <!-- Connection Status -->
+                <div class="connection-status" id="receive-connection-status">
+                    <span class="status-dot"></span>
+                    <span class="status-text">—</span>
+                </div>
+
+                <!-- Incoming File Info -->
+                <div class="file-info" id="incoming-file-info">
+                    <div class="file-info-row">
+                        <div class="file-icon">📥</div>
+                        <div class="file-details">
+                            <div class="file-name" id="incoming-file-name">—</div>
+                            <div class="file-meta">
+                                <span id="incoming-file-size">—</span>
+                                <span id="incoming-file-type">—</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Transfer Progress -->
+                <div class="transfer-section" id="receive-transfer">
+                    <div class="progress-container">
+                        <div class="progress-header">
+                            <span class="progress-label">Receiving file...</span>
+                            <span class="progress-percent" id="receive-progress-percent">0%</span>
+                        </div>
+                        <div class="progress-bar">
+                            <div class="progress-fill" id="receive-progress-fill"></div>
+                        </div>
+                    </div>
+                    <div class="transfer-stats">
+                        <div class="stat">
+                            <div class="stat-value" id="receive-speed">—</div>
+                            <div class="stat-label">Speed</div>
+                        </div>
+                        <div class="stat">
+                            <div class="stat-value" id="receive-received">—</div>
+                            <div class="stat-label">Received</div>
+                        </div>
+                        <div class="stat">
+                            <div class="stat-value" id="receive-eta">—</div>
+                            <div class="stat-label">ETA</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Transfer Complete -->
+                <div class="transfer-complete" id="receive-complete">
+                    <div class="complete-icon">✓</div>
+                    <div class="complete-title">File Received!</div>
+                    <div class="complete-subtitle">Your download should begin automatically.</div>
+                    <button class="btn btn-primary btn-lg" id="btn-download-file" style="margin-bottom: var(--space-md);">
+                        💾 Download File
+                    </button>
+                    <br>
+                    <button class="btn btn-secondary btn-lg" id="btn-receive-another">
+                        Receive Another File
+                    </button>
+                </div>
+            </section>
+
+        </main>
+
+        <!-- ═══ Footer ═══════════════════════════════════════════ -->
+        <footer class="app-footer">
+            Your files are transferred directly between browsers. They never touch our servers. 
+            Built with WebRTC · <a href="https://github.com" target="_blank" rel="noopener">GitHub</a>
+        </footer>
+
+    </div>
+
+    <!-- ═══ Toast Notifications ═══════════════════════════════ -->
+    <div class="toast" id="toast">
+        <span id="toast-message"></span>
+    </div>
+
+    <!-- ═══ Scripts ══════════════════════════════════════════ -->
+    <script src="js/signaling.js"></script>
+    <script src="js/webrtc.js"></script>
+    <script src="js/fileHandler.js"></script>
+    <script src="js/app.js"></script>
+</body>
+</html>
