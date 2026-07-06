@@ -3,33 +3,33 @@ package com.p2pshare.signaling.model;
 import com.fasterxml.jackson.annotation.JsonInclude;
 
 /**
- * POJO representing a signaling message exchanged over WebSocket.
+ * Simple POJO for messages sent over the WebSocket.
  *
- * Message types (client → server):
- *   "create-room"    — Sender requests a new room
- *   "join-room"      — Receiver joins with a room code
- *   "offer"          — SDP offer (relayed to peer)
- *   "answer"         — SDP answer (relayed to peer)
- *   "ice-candidate"  — ICE candidate (relayed to peer)
+ * Messages FROM the client:
+ *   "create-room"    — Sender wants to create a new room
+ *   "join-room"      — Receiver wants to join with a room code
+ *   "offer"          — WebRTC SDP offer
+ *   "answer"         — WebRTC SDP answer
+ *   "ice-candidate"  — WebRTC ICE candidate
  *
- * Message types (server → client):
- *   "room-created"       — Room created, includes roomCode
- *   "room-joined"        — Receiver successfully joined
- *   "peer-joined"        — Notifies sender that receiver connected
- *   "peer-disconnected"  — Notifies remaining peer
- *   "error"              — Error with message in payload
+ * Messages FROM the server:
+ *   "room-created"       — Room was created, here's the code
+ *   "room-joined"        — Successfully joined a room
+ *   "peer-joined"        — The other person connected
+ *   "peer-disconnected"  — The other person left
+ *   "error"              — Something went wrong
  *
- * Jackson serializes/deserializes this to/from JSON automatically.
- * Null fields are omitted from the JSON output to keep messages lean.
+ * Jackson converts this to/from JSON automatically.
+ * Null fields are left out of the JSON to keep messages small.
  */
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public class SignalMessage {
 
-    private String type;
-    private String roomCode;
-    private Object payload;
+    private String type;      // What kind of message this is
+    private String roomCode;  // The 5-character room code
+    private Object payload;   // SDP data, ICE candidate data, or error text
 
-    /* ── Constructors ─────────────────────────────────────────── */
+    /* ── Constructors ─────────────────────────────────────── */
 
     public SignalMessage() {
     }
@@ -38,7 +38,7 @@ public class SignalMessage {
         this.type = type;
     }
 
-    /* ── Static Factory Methods ───────────────────────────────── */
+    /* ── Factory methods for common server responses ──────── */
 
     public static SignalMessage roomCreated(String roomCode) {
         SignalMessage msg = new SignalMessage("room-created");
@@ -52,21 +52,13 @@ public class SignalMessage {
         return msg;
     }
 
-    public static SignalMessage peerJoined() {
-        return new SignalMessage("peer-joined");
-    }
-
-    public static SignalMessage peerDisconnected() {
-        return new SignalMessage("peer-disconnected");
-    }
-
     public static SignalMessage error(String message) {
         SignalMessage msg = new SignalMessage("error");
         msg.setPayload(message);
         return msg;
     }
 
-    /* ── Getters & Setters ────────────────────────────────────── */
+    /* ── Getters & Setters ────────────────────────────────── */
 
     public String getType() {
         return type;

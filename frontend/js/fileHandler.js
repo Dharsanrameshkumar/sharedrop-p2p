@@ -1,14 +1,23 @@
 /**
- * ShareDrop — File Handler (Chunking & Reassembly)
+ * File Handler — Chunking & Reassembly
  * 
- * Phase 5: Provides classes to safely read large files in Memory-efficient chunks
- * and reassemble them natively upon receipt.
+ * Problem: If you try to load a 500MB file into memory all at once,
+ * the browser will crash. 
+ *
+ * Solution: Read the file in small 64KB pieces (chunks) and send 
+ * each piece through the WebRTC data channel one at a time.
+ * On the receiving side, collect all pieces and stitch them back
+ * together using the Blob API.
  */
 
 'use strict';
 
-const CHUNK_SIZE = 64 * 1024; // 64KB - Optimal default for WebRTC DataChannels
+const CHUNK_SIZE = 64 * 1024; // 64KB per chunk
 
+/**
+ * FileSender — reads a file in 64KB chunks and sends each chunk
+ * through the WebRTC data channel.
+ */
 class FileSender {
     constructor(file, dataChannel, onProgress, onComplete) {
         this.file = file;
@@ -18,7 +27,7 @@ class FileSender {
         this.offset = 0;
         this.fileReader = new FileReader();
 
-        // When a chunk is read, send it over the WebRTC channel
+        // When a chunk is done being read from disk, send it
         this.fileReader.onload = (e) => {
             try {
                 this.dataChannel.send(e.target.result);
@@ -29,16 +38,16 @@ class FileSender {
                 }
 
                 if (this.offset < this.file.size) {
-                    this.readSlice(); // Recursive slice read
+                    this.readSlice(); // Read the next chunk
                 } else {
                     if (this.onComplete) this.onComplete();
                 }
             } catch (err) {
-                console.error("DataChannel send error:", err);
-                // Pause and retry if the buffer completely overflowed instantly
+                console.error("Error sending chunk:", err);
+                // If the buffer overflowed, wait a bit and retry
                 if (err.name === 'OperationError') {
                     setTimeout(() => {
-                        this.offset -= e.target.result.byteLength; // Rewind
+                        this.offset -= e.target.result.byteLength;
                         this.readSlice();
                     }, 100);
                 }
@@ -54,10 +63,9 @@ class FileSender {
     }
 
     readSlice() {
-        // Advanced Flow Control: Prevent dropping packets by respecting buffer limits
-        // 16 MB is a common safe bufferedAmount threshold for standard browsers.
+        // Flow Control: if the network buffer is getting full, wait before
+        // reading more data. This prevents the browser from running out of memory.
         if (this.dataChannel.bufferedAmount > 16 * 1024 * 1024) {
-            // Buffer is filling up, wait 50ms before resuming
             setTimeout(() => this.readSlice(), 50);
             return;
         }
@@ -67,6 +75,10 @@ class FileSender {
     }
 }
 
+/**
+ * FileReceiver — collects chunks from the sender and stitches them
+ * back together into a downloadable file using the Blob API.
+ */
 class FileReceiver {
     constructor(metadata, onProgress, onComplete) {
         this.metadata = metadata;
@@ -84,15 +96,16 @@ class FileReceiver {
             this.onProgress(this.receivedBytes, this.metadata.fileSize);
         }
 
-        // Check if file assembly is complete
+        // Once we've received all the bytes, assemble the file
         if (this.receivedBytes >= this.metadata.fileSize) {
             this.finish();
         }
     }
 
     finish() {
+        // Combine all chunks into a single Blob (this is the complete file)
         const blob = new Blob(this.chunks, { type: this.metadata.fileType });
-        this.chunks = []; // Drop chunks from memory aggressively
+        this.chunks = []; // Free up memory
         if (this.onComplete) this.onComplete(blob);
     }
 }

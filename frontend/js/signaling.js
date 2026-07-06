@@ -1,8 +1,8 @@
 /**
- * ShareDrop — Signaling Client
+ * Signaling Client
  * 
- * Phase 4: Manages the WebSocket connection to the backend signaling server.
- * Relays messages for room creation, joining, and WebRTC handshakes (SDP/ICE).
+ * Manages the WebSocket connection to the backend signaling server.
+ * Handles room creation, joining, and relaying WebRTC handshake messages.
  */
 
 class SignalingClient {
@@ -11,7 +11,7 @@ class SignalingClient {
         this.ws = null;
         this.currentRoomCode = null;
 
-        // Event callbacks to be set by app.js / webrtc.js
+        // Callbacks — set by app.js and webrtc.js
         this.onRoomCreated = null;
         this.onRoomJoined = null;
         this.onPeerJoined = null;
@@ -23,8 +23,8 @@ class SignalingClient {
     }
 
     /**
-     * Connects to the WebSocket server.
-     * @returns {Promise<void>} Resolves when connected, rejects on error
+     * Connect to the WebSocket server.
+     * Returns a Promise that resolves when connected.
      */
     connect() {
         return new Promise((resolve, reject) => {
@@ -37,17 +37,17 @@ class SignalingClient {
                 this.ws = new WebSocket(this.serverUrl);
                 
                 this.ws.onopen = () => {
-                    console.log('✅ Connected to Signaling Server');
+                    console.log('Connected to signaling server');
                     resolve();
                 };
 
                 this.ws.onerror = (err) => {
-                    console.error('❌ WebSocket Error:', err);
+                    console.error('WebSocket Error:', err);
                     reject(new Error('Failed to connect to server.'));
                 };
 
                 this.ws.onclose = () => {
-                    console.log('🔌 Disconnected from Signaling Server');
+                    console.log('Disconnected from signaling server');
                     this.ws = null;
                 };
 
@@ -59,7 +59,7 @@ class SignalingClient {
     }
 
     /**
-     * Internal handler for incoming WebSocket messages
+     * Handle incoming messages from the server
      */
     _handleMessage(event) {
         try {
@@ -81,11 +81,11 @@ class SignalingClient {
                     if (this.onPeerDisconnected) this.onPeerDisconnected();
                     break;
                 case 'error':
-                    console.error('Signaling Error:', msg.payload);
+                    console.error('Server Error:', msg.payload);
                     if (this.onError) this.onError(msg.payload);
                     break;
                 
-                // WebRTC Handshake messages
+                // WebRTC handshake messages
                 case 'offer':
                     if (this.onOffer) this.onOffer(msg.payload);
                     break;
@@ -97,14 +97,14 @@ class SignalingClient {
                     break;
                 
                 default:
-                    console.warn('Unknown message type received:', msg.type);
+                    console.warn('Unknown message type:', msg.type);
             }
         } catch (err) {
-            console.error('Failed to parse WebSocket message:', err);
+            console.error('Failed to parse message:', err);
         }
     }
 
-    /* ─── Outgoing Actions ────────────────────────────────────────────────── */
+    /* ─── Outgoing Messages ─────────────────────────────────── */
 
     createRoom() {
         this._send({ type: 'create-room' });
@@ -135,11 +135,11 @@ class SignalingClient {
     }
 
     /**
-     * Internal helper to send JSON strings safely
+     * Helper to safely send JSON messages
      */
     _send(data) {
         if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
-            console.error('Cannot send message: WebSocket is not open.');
+            console.error('Cannot send: WebSocket is not connected.');
             if (this.onError) this.onError("Lost connection to server.");
             return;
         }
@@ -147,11 +147,5 @@ class SignalingClient {
     }
 }
 
-// Environment Detection for WebSocket URL
-const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-const wsHost = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
-    ? 'localhost:8080' 
-    : 'sharedrop-p2p.onrender.com'; // REPLACE THIS with your actual Render/Koyeb URL
-
-// Export a singleton instance globally
-window.signaling = new SignalingClient(`${wsProtocol}//${wsHost}/signal`);
+// Create a single instance that connects to our local backend
+window.signaling = new SignalingClient('ws://localhost:8080/signal');

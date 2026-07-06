@@ -5,12 +5,13 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.scheduling.annotation.EnableScheduling;
 
 /**
- * Entry point for the WebRTC Signaling Server.
+ * Main entry point for the signaling server.
  *
- * This server acts ONLY as a message relay for WebRTC handshake signaling.
- * It never touches, stores, or inspects actual file data.
+ * This server helps two browsers find each other using WebSockets.
+ * It does NOT store or see any file data — files go directly
+ * between browsers via WebRTC.
  *
- * @EnableScheduling is used for periodic cleanup of expired rooms.
+ * @EnableScheduling is used for cleaning up old rooms automatically.
  */
 @SpringBootApplication
 @EnableScheduling

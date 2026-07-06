@@ -3,9 +3,6 @@ package com.p2pshare.signaling.handler;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.p2pshare.signaling.model.SignalMessage;
 
-import io.github.bucket4j.Bandwidth;
-import io.github.bucket4j.Bucket;
-
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -23,72 +20,51 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * Core WebSocket handler for WebRTC signaling.
+ * WebSocket handler for WebRTC signaling.
  *
- * Responsibilities:
- *   - Room creation with short alphanumeric codes
- *   - Peer pairing (max 2 per room: 1 sender + 1 receiver)
- *   - Relaying SDP Offers, SDP Answers, and ICE candidates
- *   - Per-session rate limiting via Bucket4j
- *   - Automatic cleanup of expired rooms
+ * This server only helps two browsers find each other (signaling).
+ * Once they connect via WebRTC, the server steps out of the way.
+ * It NEVER sees or stores the actual file data.
  *
- * This handler NEVER inspects, stores, or modifies SDP/ICE payloads.
- * It is a transparent message relay — a "dumb pipe" for signaling.
+ * Flow:
+ *   1. Sender creates a room -> gets a 5-character room code
+ *   2. Receiver joins the room using the code
+ *   3. Server relays SDP offer/answer and ICE candidates between them
+ *   4. Once WebRTC connects, the server is no longer needed
  */
 @Component
 public class SignalingHandler extends TextWebSocketHandler {
 
     private static final Logger log = LoggerFactory.getLogger(SignalingHandler.class);
 
-    // Characters for room codes — excluding ambiguous chars (0, O, 1, l, I)
+    // Characters used for room codes (removed confusing ones like 0/O, 1/l/I)
     private static final String ROOM_CODE_CHARS = "abcdefghjkmnpqrstuvwxyz23456789";
     private static final int ROOM_CODE_LENGTH = 5;
-    private static final int MAX_ROOMS = 1000;
+    private static final int MAX_ROOMS = 100;
     private static final Duration ROOM_EXPIRY = Duration.ofMinutes(30);
-
-    // Payload size boundaries (Security Hardening)
-    private static final int MAX_SDP_LENGTH = 16384; // 16KB Max for Offer/Answer
-    private static final int MAX_ICE_LENGTH = 4096;  // 4KB Max for ICE Candidate
 
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final SecureRandom random = new SecureRandom();
-    private final Bandwidth rateLimitBandwidth;
 
-    /** Room code → Room */
+    // Room code -> Room data
     private final Map<String, Room> rooms = new ConcurrentHashMap<>();
 
-    /** WebSocket session ID → Room code (for cleanup on disconnect) */
+    // Session ID -> Room code (so we can clean up when someone disconnects)
     private final Map<String, String> sessionToRoom = new ConcurrentHashMap<>();
 
-    /** WebSocket session ID → Rate limit bucket */
-    private final Map<String, Bucket> sessionBuckets = new ConcurrentHashMap<>();
-
-    public SignalingHandler(Bandwidth rateLimitBandwidth) {
-        this.rateLimitBandwidth = rateLimitBandwidth;
-    }
-
-    /* ══════════════════════════════════════════════════════════════
-     *  WebSocket Lifecycle
-     * ══════════════════════════════════════════════════════════════ */
+    /* ═══════════════════════════════════════════════════════════
+     *  WebSocket Lifecycle Methods
+     * ═══════════════════════════════════════════════════════════ */
 
     @Override
     public void afterConnectionEstablished(WebSocketSession session) {
-        log.info("WebSocket connected: {}", session.getId());
-
-        // Create a rate-limit bucket for this session using the configurable baseline
-        sessionBuckets.put(session.getId(), Bucket.builder().addLimit(rateLimitBandwidth).build());
+        log.info("New WebSocket connection: {}", session.getId());
     }
 
     @Override
     protected void handleTextMessage(WebSocketSession session, TextMessage message) throws Exception {
-        // ── Rate Limiting ──────────────────────────────────────────
-        Bucket bucket = sessionBuckets.get(session.getId());
-        if (bucket != null && !bucket.tryConsume(1)) {
-            sendMessage(session, SignalMessage.error("Rate limit exceeded. Please slow down."));
-            return;
-        }
 
-        // ── Parse JSON ─────────────────────────────────────────────
+        // Parse the incoming JSON message
         SignalMessage signal;
         try {
             signal = objectMapper.readValue(message.getPayload(), SignalMessage.class);
@@ -102,33 +78,12 @@ public class SignalingHandler extends TextWebSocketHandler {
             return;
         }
 
-        // ── Input Validation Hardening ─────────────────────────────
-        if (signal.getPayload() != null) {
-            int payloadLength = signal.getPayload().toString().length();
-            String type = signal.getType();
-
-            if (("offer".equals(type) || "answer".equals(type)) && payloadLength > MAX_SDP_LENGTH) {
-                sendMessage(session, SignalMessage.error("SDP payload exceeds maximum allowed size (16KB)."));
-                log.warn("Blocked oversized SDP payload from session: {}", session.getId());
-                return;
-            }
-
-            if ("ice-candidate".equals(type) && payloadLength > MAX_ICE_LENGTH) {
-                sendMessage(session, SignalMessage.error("ICE payload exceeds maximum allowed size (4KB)."));
-                log.warn("Blocked oversized ICE payload from session: {}", session.getId());
-                return;
-            }
-        }
-
-        // ── Route by message type ──────────────────────────────────
+        // Route to the correct handler based on message type
         switch (signal.getType()) {
-            case "create-room"    -> handleCreateRoom(session);
-            case "join-room"      -> handleJoinRoom(session, signal);
-            case "offer",
-                 "answer",
-                 "ice-candidate"  -> relayMessage(session, signal);
-            default               -> sendMessage(session,
-                    SignalMessage.error("Unknown message type: " + signal.getType()));
+            case "create-room"   -> handleCreateRoom(session);
+            case "join-room"     -> handleJoinRoom(session, signal);
+            case "offer", "answer", "ice-candidate" -> relayToOtherPeer(session, signal);
+            default -> sendMessage(session, SignalMessage.error("Unknown message type: " + signal.getType()));
         }
     }
 
@@ -136,45 +91,31 @@ public class SignalingHandler extends TextWebSocketHandler {
     public void afterConnectionClosed(WebSocketSession session, CloseStatus status) {
         log.info("WebSocket disconnected: {} ({})", session.getId(), status);
 
-        // Clean up rate-limit bucket
-        sessionBuckets.remove(session.getId());
-
-        // Find and clean up room membership
+        // Find which room this session was in
         String roomCode = sessionToRoom.remove(session.getId());
         if (roomCode == null) return;
 
         Room room = rooms.get(roomCode);
         if (room == null) return;
 
-        // Determine which peer left and notify the other
-        WebSocketSession remainingPeer = null;
-
-        if (room.sender != null && room.sender.getId().equals(session.getId())) {
-            remainingPeer = room.receiver;
-            room.sender = null;
-        } else if (room.receiver != null && room.receiver.getId().equals(session.getId())) {
-            remainingPeer = room.sender;
-            room.receiver = null;
+        // Notify the other peer that this one disconnected
+        WebSocketSession otherPeer = getOtherPeer(room, session.getId());
+        if (otherPeer != null && otherPeer.isOpen()) {
+            sendMessage(otherPeer, new SignalMessage("peer-disconnected"));
+            sessionToRoom.remove(otherPeer.getId());
         }
 
-        // Remove room if both peers are gone
-        if (room.sender == null && room.receiver == null) {
-            rooms.remove(roomCode);
-            log.info("Room {} removed (empty)", roomCode);
-        }
-
-        // Notify the remaining peer
-        if (remainingPeer != null && remainingPeer.isOpen()) {
-            sendMessage(remainingPeer, SignalMessage.peerDisconnected());
-        }
+        // Remove the room entirely
+        rooms.remove(roomCode);
+        log.info("Room {} removed (peer disconnected)", roomCode);
     }
 
-    /* ══════════════════════════════════════════════════════════════
+    /* ═══════════════════════════════════════════════════════════
      *  Message Handlers
-     * ══════════════════════════════════════════════════════════════ */
+     * ═══════════════════════════════════════════════════════════ */
 
     /**
-     * Handles "create-room": generates a unique short code and registers the sender.
+     * Sender clicks "Create Share Link" -> we generate a room code.
      */
     private void handleCreateRoom(WebSocketSession session) {
         if (sessionToRoom.containsKey(session.getId())) {
@@ -183,11 +124,11 @@ public class SignalingHandler extends TextWebSocketHandler {
         }
 
         if (rooms.size() >= MAX_ROOMS) {
-            sendMessage(session, SignalMessage.error("Server is at capacity. Please try again later."));
+            sendMessage(session, SignalMessage.error("Server is full. Please try again later."));
             return;
         }
 
-        // Generate a unique room code (retry up to 10 times on collision)
+        // Generate a unique 5-character room code
         String roomCode = generateRoomCode();
         int attempts = 0;
         while (rooms.containsKey(roomCode) && attempts < 10) {
@@ -195,27 +136,21 @@ public class SignalingHandler extends TextWebSocketHandler {
             attempts++;
         }
 
-        if (rooms.containsKey(roomCode)) {
-            sendMessage(session, SignalMessage.error("Could not generate unique room code. Try again."));
-            return;
-        }
-
-        // Create the room with this session as the sender
+        // Create the room with sender as the first peer
         Room room = new Room();
         room.code = roomCode;
-        room.sender = session;
         room.createdAt = Instant.now();
+        room.sender = session;
 
         rooms.put(roomCode, room);
         sessionToRoom.put(session.getId(), roomCode);
 
         sendMessage(session, SignalMessage.roomCreated(roomCode));
-        log.info("Room {} created by session {}", roomCode, session.getId());
+        log.info("Room {} created by {}", roomCode, session.getId());
     }
 
     /**
-     * Handles "join-room": validates the room code and pairs the receiver.
-     * Notifies the sender to begin the WebRTC offer.
+     * Receiver enters the room code and clicks "Connect" -> they join the room.
      */
     private void handleJoinRoom(WebSocketSession session, SignalMessage signal) {
         if (sessionToRoom.containsKey(session.getId())) {
@@ -238,28 +173,30 @@ public class SignalingHandler extends TextWebSocketHandler {
         }
 
         if (room.receiver != null) {
-            sendMessage(session, SignalMessage.error("Room is full. Only two peers are allowed."));
+            sendMessage(session, SignalMessage.error("Room is full. Only 2 people can share at a time."));
             return;
         }
 
-        // Pair the receiver
+        // Add the receiver to the room
         room.receiver = session;
         sessionToRoom.put(session.getId(), roomCode);
 
-        // Notify sender → triggers the WebRTC offer creation on the sender's side
-        sendMessage(room.sender, SignalMessage.peerJoined());
+        // Tell the sender that the receiver has connected
+        if (room.sender != null && room.sender.isOpen()) {
+            sendMessage(room.sender, new SignalMessage("peer-joined"));
+        }
 
-        // Confirm to receiver that they've joined
+        // Confirm to the receiver that they joined
         sendMessage(session, SignalMessage.roomJoined(roomCode));
 
-        log.info("Session {} joined room {}", session.getId(), roomCode);
+        log.info("Receiver joined room {}", roomCode);
     }
 
     /**
-     * Relays offer/answer/ice-candidate messages to the other peer in the room.
-     * The server does NOT read or modify the payload — it's a transparent relay.
+     * Relay WebRTC messages (offer, answer, ICE candidate) to the other peer.
+     * The server does NOT read or modify these — it just forwards them.
      */
-    private void relayMessage(WebSocketSession session, SignalMessage signal) {
+    private void relayToOtherPeer(WebSocketSession session, SignalMessage signal) {
         String roomCode = sessionToRoom.get(session.getId());
         if (roomCode == null) {
             sendMessage(session, SignalMessage.error("You are not in a room."));
@@ -272,33 +209,35 @@ public class SignalingHandler extends TextWebSocketHandler {
             return;
         }
 
-        // Determine the other peer
-        WebSocketSession target;
-        if (room.sender != null && room.sender.getId().equals(session.getId())) {
-            target = room.receiver;
-        } else if (room.receiver != null && room.receiver.getId().equals(session.getId())) {
-            target = room.sender;
-        } else {
-            sendMessage(session, SignalMessage.error("Session not found in room."));
-            return;
-        }
-
+        // Find the other peer in the room and send the message to them
+        WebSocketSession target = getOtherPeer(room, session.getId());
         if (target == null || !target.isOpen()) {
-            sendMessage(session, SignalMessage.error("Peer is not connected."));
+            sendMessage(session, SignalMessage.error("Other peer is not connected."));
             return;
         }
 
-        // Relay the message as-is — we never inspect SDP or ICE payloads
         sendMessage(target, signal);
     }
 
-    /* ══════════════════════════════════════════════════════════════
-     *  Utilities
-     * ══════════════════════════════════════════════════════════════ */
+    /* ═══════════════════════════════════════════════════════════
+     *  Helper Methods
+     * ═══════════════════════════════════════════════════════════ */
 
     /**
-     * Sends a SignalMessage as JSON to the given WebSocket session.
-     * Synchronized on the session to prevent concurrent writes.
+     * Given a room and one session ID, return the OTHER session in the room.
+     */
+    private WebSocketSession getOtherPeer(Room room, String mySessionId) {
+        if (room.sender != null && room.sender.getId().equals(mySessionId)) {
+            return room.receiver;
+        }
+        if (room.receiver != null && room.receiver.getId().equals(mySessionId)) {
+            return room.sender;
+        }
+        return null;
+    }
+
+    /**
+     * Send a JSON message to a WebSocket session safely.
      */
     private void sendMessage(WebSocketSession session, SignalMessage message) {
         if (session == null || !session.isOpen()) return;
@@ -309,13 +248,12 @@ public class SignalingHandler extends TextWebSocketHandler {
                 session.sendMessage(new TextMessage(json));
             }
         } catch (IOException e) {
-            log.error("Failed to send message to session {}: {}", session.getId(), e.getMessage());
+            log.error("Failed to send message to {}: {}", session.getId(), e.getMessage());
         }
     }
 
     /**
-     * Generates a random room code using URL-safe, unambiguous characters.
-     * Example output: "k7m3p"
+     * Generate a random 5-character room code like "k7m3p".
      */
     private String generateRoomCode() {
         StringBuilder sb = new StringBuilder(ROOM_CODE_LENGTH);
@@ -326,8 +264,9 @@ public class SignalingHandler extends TextWebSocketHandler {
     }
 
     /**
-     * Scheduled task: cleans up rooms older than ROOM_EXPIRY.
-     * Runs every 5 minutes to prevent memory leaks from abandoned rooms.
+     * Background task: automatically remove rooms older than 30 minutes.
+     * This prevents memory leaks if people forget to close their browsers.
+     * Runs every 5 minutes.
      */
     @Scheduled(fixedRate = 300_000)
     public void cleanupExpiredRooms() {
@@ -336,15 +275,9 @@ public class SignalingHandler extends TextWebSocketHandler {
         rooms.entrySet().removeIf(entry -> {
             Room room = entry.getValue();
             if (room.createdAt.isBefore(cutoff)) {
-                // Clean up session mappings and close stale connections
-                if (room.sender != null) {
-                    sessionToRoom.remove(room.sender.getId());
-                    closeQuietly(room.sender);
-                }
-                if (room.receiver != null) {
-                    sessionToRoom.remove(room.receiver.getId());
-                    closeQuietly(room.receiver);
-                }
+                // Remove session mappings
+                if (room.sender != null) sessionToRoom.remove(room.sender.getId());
+                if (room.receiver != null) sessionToRoom.remove(room.receiver.getId());
                 log.info("Expired room {} cleaned up", entry.getKey());
                 return true;
             }
@@ -352,32 +285,14 @@ public class SignalingHandler extends TextWebSocketHandler {
         });
     }
 
-    /**
-     * Closes a WebSocket session without throwing exceptions.
-     */
-    private void closeQuietly(WebSocketSession session) {
-        try {
-            if (session.isOpen()) {
-                session.close(CloseStatus.GOING_AWAY);
-            }
-        } catch (IOException ignored) {
-            // Intentionally swallowed — session may already be dead
-        }
-    }
+    /* ═══════════════════════════════════════════════════════════
+     *  Room Class — holds sender and receiver for each room
+     * ═══════════════════════════════════════════════════════════ */
 
-    /* ══════════════════════════════════════════════════════════════
-     *  Inner Classes
-     * ══════════════════════════════════════════════════════════════ */
-
-    /**
-     * Represents an ephemeral signaling room.
-     * Holds references to two WebSocket sessions (sender + receiver)
-     * and is automatically cleaned up after ROOM_EXPIRY.
-     */
     private static class Room {
         String code;
-        WebSocketSession sender;
-        WebSocketSession receiver;
         Instant createdAt;
+        WebSocketSession sender;   // The person sending the file
+        WebSocketSession receiver; // The person receiving the file
     }
 }

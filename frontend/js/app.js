@@ -1,10 +1,8 @@
 /**
- * ShareDrop — App Controller (UI Navigation & Interactions)
+ * ShareDrop — Main App Controller
  * 
- * Phase 3: Handles view switching, file selection UI, room code input,
- * drag & drop, and toast notifications.
- * 
- * Phase 4-5 will add: signaling.js, webrtc.js, fileHandler.js
+ * Handles the UI: view switching, file selection, drag & drop,
+ * room codes, progress bars, and toast notifications.
  */
 
 'use strict';
@@ -63,7 +61,7 @@ let selectedFile = null;
 let toastTimeout = null;
 
 /* ══════════════════════════════════════════════════════════════
- *  View Navigation
+ *  View Navigation — switches between Home, Send, and Receive
  * ══════════════════════════════════════════════════════════════ */
 
 function showView(viewId) {
@@ -74,7 +72,7 @@ function showView(viewId) {
     }
 }
 
-// Navigation bindings
+// Navigation button clicks
 btnGoSend.addEventListener('click', () => showView('view-send'));
 btnGoReceive.addEventListener('click', () => showView('view-receive'));
 logoHomeLink.addEventListener('click', () => {
@@ -99,7 +97,7 @@ btnReceiveAnother.addEventListener('click', () => {
     showView('view-receive');
 });
 
-// Keyboard support for action cards
+// Keyboard support for the action cards
 btnGoSend.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' || e.key === ' ') {
         e.preventDefault();
@@ -117,17 +115,17 @@ btnGoReceive.addEventListener('keydown', (e) => {
  *  File Selection & Drag-and-Drop
  * ══════════════════════════════════════════════════════════════ */
 
-// Click to browse
+// Click the drop zone to open file picker
 dropZone.addEventListener('click', () => fileInput.click());
 
-// File input change
+// When a file is selected via the file picker
 fileInput.addEventListener('change', (e) => {
     if (e.target.files.length > 0) {
         handleFileSelect(e.target.files[0]);
     }
 });
 
-// Drag and drop
+// Drag and drop support
 dropZone.addEventListener('dragover', (e) => {
     e.preventDefault();
     dropZone.classList.add('drag-over');
@@ -147,7 +145,7 @@ dropZone.addEventListener('drop', (e) => {
 });
 
 function handleFileSelect(file) {
-    // Validate file size
+    // Check file size
     if (file.size > MAX_FILE_SIZE) {
         showToast(`File too large! Max size is 1 GB. Your file: ${formatBytes(file.size)}`, 'error');
         return;
@@ -160,7 +158,7 @@ function handleFileSelect(file) {
 
     selectedFile = file;
 
-    // Update UI
+    // Update the file info display
     fileName.textContent = file.name;
     fileSize.textContent = formatBytes(file.size);
     fileType.textContent = file.type || 'Unknown type';
@@ -172,7 +170,7 @@ function handleFileSelect(file) {
     btnCreateRoom.disabled = false;
 }
 
-// Remove file
+// Remove selected file
 btnRemoveFile.addEventListener('click', () => {
     clearFileSelection();
 });
@@ -190,7 +188,7 @@ function clearFileSelection() {
  * ══════════════════════════════════════════════════════════════ */
 
 roomCodeInputs.forEach((input, index) => {
-    // Auto-advance on input
+    // Auto-move to next input box when a character is typed
     input.addEventListener('input', (e) => {
         const val = e.target.value;
         if (val.length === 1 && index < roomCodeInputs.length - 1) {
@@ -199,14 +197,14 @@ roomCodeInputs.forEach((input, index) => {
         updateJoinButton();
     });
 
-    // Handle backspace to go back
+    // Handle backspace to go to previous input
     input.addEventListener('keydown', (e) => {
         if (e.key === 'Backspace' && !e.target.value && index > 0) {
             roomCodeInputs[index - 1].focus();
             roomCodeInputs[index - 1].value = '';
             updateJoinButton();
         }
-        // Handle Enter to submit
+        // Press Enter to submit
         if (e.key === 'Enter') {
             const code = getRoomCodeFromInputs();
             if (code.length === 5) {
@@ -215,7 +213,7 @@ roomCodeInputs.forEach((input, index) => {
         }
     });
 
-    // Handle paste (spread across inputs)
+    // Handle paste — spread characters across all 5 inputs
     input.addEventListener('paste', (e) => {
         e.preventDefault();
         const paste = (e.clipboardData || window.clipboardData)
@@ -230,7 +228,6 @@ roomCodeInputs.forEach((input, index) => {
             }
         });
 
-        // Focus the input after the last pasted char
         const focusIndex = Math.min(paste.length, roomCodeInputs.length - 1);
         roomCodeInputs[focusIndex].focus();
         updateJoinButton();
@@ -249,7 +246,7 @@ function updateJoinButton() {
 }
 
 /* ══════════════════════════════════════════════════════════════
- *  Copy Room Code
+ *  Copy Room Code to Clipboard
  * ══════════════════════════════════════════════════════════════ */
 
 btnCopyCode.addEventListener('click', async () => {
@@ -269,7 +266,7 @@ btnCopyCode.addEventListener('click', async () => {
 });
 
 /* ══════════════════════════════════════════════════════════════
- *  Step Indicator
+ *  Step Indicator (1. Select File → 2. Share Code → 3. Transfer)
  * ══════════════════════════════════════════════════════════════ */
 
 function updateSendStep(activeStep) {
@@ -285,17 +282,13 @@ function updateSendStep(activeStep) {
 }
 
 /* ══════════════════════════════════════════════════════════════
- *  Toast Notifications
+ *  Toast Notifications (small popup messages)
  * ══════════════════════════════════════════════════════════════ */
 
 function showToast(message, type = 'info', duration = 4000) {
-    // Clear existing timeout
     if (toastTimeout) clearTimeout(toastTimeout);
 
-    // Remove old type classes
     toastEl.classList.remove('toast-error', 'toast-success', 'toast-info', 'visible');
-
-    // Set content and type
     toastMessage.textContent = message;
     toastEl.classList.add(`toast-${type}`);
 
@@ -303,14 +296,13 @@ function showToast(message, type = 'info', duration = 4000) {
     void toastEl.offsetWidth;
     toastEl.classList.add('visible');
 
-    // Auto-hide
     toastTimeout = setTimeout(() => {
         toastEl.classList.remove('visible');
     }, duration);
 }
 
 /* ══════════════════════════════════════════════════════════════
- *  Reset Helpers
+ *  Reset Helpers — clean up UI when navigating back
  * ══════════════════════════════════════════════════════════════ */
 
 function resetSendView() {
@@ -321,7 +313,6 @@ function resetSendView() {
     dropZone.style.display = '';
     updateSendStep(1);
 
-    // Hide transfer & complete sections
     const sendTransfer = $('#send-transfer');
     const sendComplete = $('#send-complete');
     const sendStatus = $('#send-connection-status');
@@ -334,7 +325,6 @@ function resetReceiveView() {
     roomCodeInputs.forEach(input => input.value = '');
     btnJoinRoom.disabled = true;
 
-    // Hide transfer & complete sections
     const receiveTransfer = $('#receive-transfer');
     const receiveComplete = $('#receive-complete');
     const receiveStatus = $('#receive-connection-status');
@@ -371,7 +361,7 @@ function getFileIcon(mimeType, name) {
 }
 
 /* ══════════════════════════════════════════════════════════════
- *  Signaling & Network Actions (Phase 4)
+ *  Signaling — Connect to the backend and handle room events
  * ══════════════════════════════════════════════════════════════ */
 
 // "Create Share Link" button (Sender)
@@ -414,7 +404,7 @@ btnJoinRoom.addEventListener('click', async () => {
     }
 });
 
-// Setup Signaling Callbacks
+// When our room is created successfully
 window.signaling.onRoomCreated = (roomCode) => {
     roomCodeValue.textContent = roomCode.toUpperCase();
     roomCodeSection.classList.add('visible');
@@ -424,30 +414,34 @@ window.signaling.onRoomCreated = (roomCode) => {
 
     const status = $('#send-connection-status');
     status.className = 'connection-status visible waiting';
-    status.style.color = ''; // reset default
+    status.style.color = '';
     status.querySelector('.status-text').textContent = 'Waiting for receiver to connect...';
     btnCreateRoom.textContent = 'Create Share Link';
 };
 
+// When we successfully join a room
 window.signaling.onRoomJoined = (roomCode) => {
     const status = $('#receive-connection-status');
     status.className = 'connection-status visible connected';
     status.style.color = 'var(--accent-green)';
-    status.querySelector('.status-text').textContent = `Joined room! Waiting for WebRTC connection...`;
+    status.querySelector('.status-text').textContent = `Joined room! Setting up connection...`;
     
     roomCodeInputs.forEach(input => input.disabled = true);
     btnJoinRoom.style.display = 'none';
 };
 
+// When the receiver connects to our room (sender gets this)
 window.signaling.onPeerJoined = () => {
     const status = $('#send-connection-status');
     status.className = 'connection-status visible connected';
     status.style.color = 'var(--accent-green)';
-    status.querySelector('.status-text').textContent = 'Receiver connected! Establishing direct connection...';
+    status.querySelector('.status-text').textContent = 'Receiver connected! Setting up direct connection...';
     
-    window.webrtc.initialize(true); // Sender creates the WebRTC Offer
+    // Sender starts the WebRTC handshake
+    window.webrtc.initialize(true);
 };
 
+// When the other person disconnects
 window.signaling.onPeerDisconnected = () => {
     showToast('Peer disconnected.', 'error');
     const statusSend = $('#send-connection-status');
@@ -457,6 +451,7 @@ window.signaling.onPeerDisconnected = () => {
     if (statusRecv) statusRecv.className = 'connection-status visible error';
 };
 
+// When the server sends an error
 window.signaling.onError = (errMsg) => {
     showToast(errMsg, 'error');
     btnCreateRoom.disabled = false;
@@ -471,14 +466,13 @@ window.signaling.onError = (errMsg) => {
 };
 
 /* ══════════════════════════════════════════════════════════════
- *  Initialize
+ *  Startup
  * ══════════════════════════════════════════════════════════════ */
 
-console.log('%c⚡ ShareDrop v1.0', 'color: #00d4ff; font-size: 16px; font-weight: bold;');
-console.log('%cPeer-to-peer file sharing. No servers. No storage.', 'color: #8888a0;');
+console.log('⚡ ShareDrop - P2P File Sharing');
 
 /* ══════════════════════════════════════════════════════════════
- *  WebRTC & File Transfer Actions (Phase 5)
+ *  WebRTC & File Transfer — the actual file sending/receiving
  * ══════════════════════════════════════════════════════════════ */
 let fileSender = null;
 let fileReceiver = null;
@@ -486,12 +480,13 @@ let incomingMetadata = null;
 let startTime = 0;
 
 window.webrtc.onConnectionStatus = (state) => {
-    console.log("WebRTC PeerConnection state:", state);
+    console.log("Connection state:", state);
 };
 
+// When the direct connection between browsers is ready
 window.webrtc.onDataChannelOpen = () => {
     if (window.webrtc.isSender) {
-        // Send metadata
+        // Send file metadata first (name, size, type)
         const metadata = {
             fileName: selectedFile.name,
             fileSize: selectedFile.size,
@@ -499,43 +494,43 @@ window.webrtc.onDataChannelOpen = () => {
         };
         window.webrtc.sendMetadata({ type: 'metadata', ...metadata });
         
-        // Setup UI
+        // Update UI to show transfer progress
         $('#send-connection-status').classList.remove('visible');
         $('#send-transfer').classList.add('visible');
         updateSendStep(3);
         startTime = Date.now();
 
-        // Start sending file
+        // Start sending the file in chunks
         fileSender = new window.fileHandler.FileSender(
             selectedFile, 
             window.webrtc.dataChannel,
             updateSenderProgress,
             () => {
+                // File finished sending
                 window.webrtc.sendMetadata({ type: 'EOF' });
                 $('#send-transfer').classList.remove('visible');
                 $('#send-complete').classList.add('visible');
-                
-                // Keep history clean explicitly
                 window.webrtc.close();
             }
         );
         fileSender.start();
     } else {
-        // Receiver UI update
+        // Receiver — update UI
         const status = $('#receive-connection-status');
         status.className = 'connection-status visible connected';
         status.style.color = 'var(--accent-green)';
-        status.querySelector('.status-text').textContent = 'Peers connected! Waiting for file...';
+        status.querySelector('.status-text').textContent = 'Connected! Waiting for file...';
     }
 };
 
+// When we receive a text message (JSON metadata)
 window.webrtc.onMessage = (msgString) => {
     try {
         const msg = JSON.parse(msgString);
         if (msg.type === 'metadata') {
             incomingMetadata = msg;
             
-            // UI
+            // Show incoming file info
             $('#receive-connection-status').classList.remove('visible');
             $('#incoming-file-info').classList.add('visible');
             $('#incoming-file-name').textContent = msg.fileName;
@@ -545,11 +540,12 @@ window.webrtc.onMessage = (msgString) => {
             
             startTime = Date.now();
             
-            // Prepare receiver
+            // Prepare to receive the file chunks
             fileReceiver = new window.fileHandler.FileReceiver(
                 msg,
                 updateReceiverProgress,
                 (blob) => {
+                    // File fully received — set up download button
                     const url = URL.createObjectURL(blob);
                     btnDownloadFile.onclick = () => {
                         const a = document.createElement('a');
@@ -562,18 +558,16 @@ window.webrtc.onMessage = (msgString) => {
                     
                     $('#receive-transfer').classList.remove('visible');
                     $('#receive-complete').classList.add('visible');
-                    
                     window.webrtc.close();
                 }
             );
-        } else if (msg.type === 'EOF') {
-            // End of file signal
         }
     } catch (e) {
-        console.error("Failed to parse datachannel message", e);
+        console.error("Failed to parse message", e);
     }
 };
 
+// When we receive binary data (file chunk)
 window.webrtc.onBinaryMessage = (arrayBuffer) => {
     if (fileReceiver) {
         fileReceiver.pushChunk(arrayBuffer);
@@ -581,8 +575,12 @@ window.webrtc.onBinaryMessage = (arrayBuffer) => {
 };
 
 window.webrtc.onDataChannelClose = () => {
-    console.log("Data connection closed");
+    console.log("Data channel closed");
 };
+
+/* ══════════════════════════════════════════════════════════════
+ *  Progress Tracking — speed, ETA, percentage
+ * ══════════════════════════════════════════════════════════════ */
 
 function updateSenderProgress(sentBytes, totalBytes) {
     const percent = Math.round((sentBytes / totalBytes) * 100);
@@ -590,7 +588,6 @@ function updateSenderProgress(sentBytes, totalBytes) {
     $('#send-progress-fill').style.width = `${percent}%`;
     $('#send-transferred').textContent = `${formatBytes(sentBytes)} / ${formatBytes(totalBytes)}`;
     
-    // Speed tracking
     const elapsed = (Date.now() - startTime) / 1000;
     if (elapsed > 0) {
         const speed = sentBytes / elapsed;

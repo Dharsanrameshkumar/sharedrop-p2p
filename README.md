@@ -1,62 +1,72 @@
-<div align="center">
-  <h1>ShareDrop ⚡</h1>
-  <p><strong>Ephemeral P2P File Sharing. Decoupled Architecture. Zero Data Retention.</strong></p>
-  <p>
-    <a href="https://your-frontend-demo-url.vercel.app"><strong>View Live Demo</strong></a> · 
-    <a href="#-architecture"><strong>Explore Architecture</strong></a>
-  </p>
-</div>
+# ShareDrop ⚡ — P2P File Sharing
 
-ShareDrop is an open-source, login-free, deeply secure peer-to-peer file sharing application. It empowers users to stream colossal files (1GB+) directly between browsers at high speeds over WebRTC DataChannels. Your files never touch a centralized server, ensuring absolute privacy and negating 100% of cloud storage fees.
+A peer-to-peer file sharing web app that lets you send files directly between two browsers. No login, no cloud storage, no file size limits worries — the file goes straight from one browser to the other using **WebRTC**.
 
-The application leverages a framework-agnostic Vanilla JavaScript frontend interfacing seamlessly with a lightweight Java Spring Boot WebSocket server that acts strictly as a "blind" signaling mediator. 
+## How It Works
 
----
+1. **Sender** picks a file and gets a 5-character room code
+2. **Receiver** enters the code to connect
+3. The backend (Spring Boot) helps them find each other via WebSocket
+4. Once connected, files transfer directly between browsers via WebRTC
+5. The server **never** sees or stores the file data
 
-## 🚀 Key Features
+## Tech Stack
 
-*   **Zero-Data-Retention:** The backend acts solely as an ephemeral relay. It negotiates connection handshakes and immediately sidelines itself. It never processes, touches, or temporarily retains binary payload data.
-*   **End-to-End Encryption:** All peer-to-peer streams are natively encrypted via Datagram Transport Layer Security (DTLS) and Secure Real-time Transport Protocol (SRTP).
-*   **Advanced Flow Control:** Massive file reads crush browser limits. Our custom Memory-Safe processing engine slices files recursively in `64KB` segments natively. It actively polls the DataChannel's `bufferedAmount` to throttle reads during network congestion, ensuring high-reliability streams.
-*   **Defense-in-Depth Security:** The signaling server is rigorously protected against DoS. Custom `Bucket4j` Token-Bucket algorithms limit connection bursts, and payload structures are hard-capped to nullify memory exhaustion attacks.
-*   **Framework-Agnostic UI:** Built utilizing ES6+ Vanilla JavaScript and modular CSS. Complete with native glassmorphism, progressive UI loading, and raw byte-throughput calculations without React, Vue, or Webpack dependency bloat.
+| Layer | Technology | Why |
+|-------|-----------|-----|
+| **Frontend** | Vanilla JavaScript (ES6+), CSS3 | Direct access to WebRTC and File APIs without framework overhead |
+| **Backend** | Java 17, Spring Boot 3 | Lightweight WebSocket server for signaling |
+| **P2P Connection** | WebRTC DataChannel | Direct browser-to-browser transfer, encrypted by default |
+| **NAT Traversal** | Google STUN Server | Helps browsers discover each other's IP addresses |
 
----
+## Project Structure
 
-## 🛠️ Architecture Deep Dive
+```
+p2p/
+├── frontend/
+│   ├── index.html          # Main UI page
+│   ├── css/style.css       # All styles (dark theme, glassmorphism)
+│   └── js/
+│       ├── signaling.js    # WebSocket client (talks to backend)
+│       ├── webrtc.js       # WebRTC peer connection setup
+│       ├── fileHandler.js  # File chunking (64KB) and reassembly
+│       └── app.js          # UI logic, drag-drop, progress bars
+│
+├── backend/
+│   ├── pom.xml             # Maven dependencies
+│   └── src/main/java/com/p2pshare/signaling/
+│       ├── SignalingApplication.java       # Spring Boot entry point
+│       ├── config/WebSocketConfig.java     # Registers /signal endpoint
+│       ├── handler/SignalingHandler.java   # Room management & message relay
+│       └── model/SignalMessage.java        # JSON message structure
+│
+└── README.md
+```
 
-The system operates across two decoupled micro-services:
+## Key Features
 
-### 1. Spring Boot Signaling Cluster (`/backend`)
-*   **Tech Stack:** Java 17, Spring Boot 3.x, Concurrent Data Structures, Bucket4j.
-*   **Function:** Accepts encrypted WebSocket connections and groups isolated peers via alpha-numeric keys. It strictly relays the Session Description Protocol (SDP) configurations and Trickle ICE arrays to pierce NAT configurations.
-*   **Automation:** Sweeps idle websockets and drops abandoned rooms using automated scheduling threads to preserve heap constraints.
+- **Direct P2P Transfer** — Files go straight between browsers, not through a server
+- **File Chunking** — Large files are split into 64KB chunks to prevent browser crashes
+- **Flow Control** — Monitors WebRTC buffer to pause sending when the network is slow
+- **Room Codes** — 5-character codes to pair sender and receiver
+- **Auto Cleanup** — Old rooms are automatically removed after 30 minutes
+- **Drag & Drop** — Drag files into the browser to share them
+- **Progress Tracking** — Real-time speed, ETA, and percentage display
 
-### 2. Client Application (`/frontend`)
-*   **Tech Stack:** Vanilla JavaScript (ES6+), CSS3.
-*   **Function:** Leverages Google's edge STUN servers to secure external IP mappings. Captures `ArrayBuffer` payloads, tracking checksums across boundaries, reassembling binary structures natively via the `Blob` API, and automating file instantiation.
+## How to Run Locally
 
----
-
-## 💻 Local Setup
-
-You can fully test the architecture by spinning up both micro-services natively.
-
-**1. Launch the Backend (Signaling)**
-Requires Java 17 and Maven.
+### 1. Start the Backend
+Requires **Java 17** and **Maven**.
 ```bash
 cd backend
 mvn clean spring-boot:run
 ```
-*The signaling socket mounts cleanly at `ws://localhost:8080/signal`.*
+The WebSocket server starts at `ws://localhost:8080/signal`
 
-**2. Launch the Frontend (Client)**
-Because there are zero transpilers, any static server can mount the node.
+### 2. Start the Frontend
+Any static file server works.
 ```bash
 cd frontend
 npx http-server
 ```
-Navigate to `http://localhost:8080` instances to execute split-screen peer transfers.
-
----
-> *Developed as a masterclass demonstration on full-stack Java/WebRTC integration.*
+Open two browser tabs and test sending a file between them.
