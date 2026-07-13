@@ -15,37 +15,42 @@ A peer-to-peer file sharing web app that lets you send files directly between tw
 | Layer | Technology | Why |
 |-------|-----------|-----|
 | **Frontend** | Vanilla JavaScript (ES6+), CSS3 | Direct access to WebRTC and File APIs without framework overhead |
-| **Backend** | Java 17, Spring Boot 3 | Lightweight WebSocket server for signaling |
+| **Backend** | Java 17, Spring Boot 3 | Serves the frontend + WebSocket signaling in one process |
 | **P2P Connection** | WebRTC DataChannel | Direct browser-to-browser transfer, encrypted by default |
-| **NAT Traversal** | Google STUN Server | Helps browsers discover each other's IP addresses |
+| **Networking** | LAN-only (no internet needed) | Works on same Wi-Fi — no STUN/TURN servers required |
 
 ## Project Structure
 
 ```
 p2p/
-├── frontend/
-│   ├── index.html          # Main UI page
-│   ├── css/style.css       # All styles (dark theme, glassmorphism)
+├── frontend/                          # Source frontend files
+│   ├── index.html
+│   ├── css/style.css
 │   └── js/
-│       ├── signaling.js    # WebSocket client (talks to backend)
-│       ├── webrtc.js       # WebRTC peer connection setup
-│       ├── fileHandler.js  # File chunking (64KB) and reassembly
-│       └── app.js          # UI logic, drag-drop, progress bars
+│       ├── signaling.js               # WebSocket client (auto-detects server)
+│       ├── webrtc.js                  # WebRTC peer connection (LAN-only)
+│       ├── fileHandler.js             # File chunking (64KB) and reassembly
+│       └── app.js                     # UI logic, drag-drop, progress bars
 │
 ├── backend/
-│   ├── pom.xml             # Maven dependencies
-│   └── src/main/java/com/p2pshare/signaling/
-│       ├── SignalingApplication.java       # Spring Boot entry point
-│       ├── config/WebSocketConfig.java     # Registers /signal endpoint
-│       ├── handler/SignalingHandler.java   # Room management & message relay
-│       └── model/SignalMessage.java        # JSON message structure
+│   ├── pom.xml
+│   └── src/main/
+│       ├── java/com/p2pshare/signaling/
+│       │   ├── SignalingApplication.java
+│       │   ├── config/WebSocketConfig.java
+│       │   ├── handler/SignalingHandler.java
+│       │   └── model/SignalMessage.java
+│       └── resources/
+│           └── static/                # Frontend served by Spring Boot
 │
 └── README.md
 ```
 
 ## Key Features
 
+- **No Internet Required** — Works entirely on your local Wi-Fi network
 - **Direct P2P Transfer** — Files go straight between browsers, not through a server
+- **Single Server** — One `mvn spring-boot:run` serves everything (frontend + signaling)
 - **File Chunking** — Large files are split into 64KB chunks to prevent browser crashes
 - **Flow Control** — Monitors WebRTC buffer to pause sending when the network is slow
 - **Room Codes** — 5-character codes to pair sender and receiver
@@ -53,20 +58,24 @@ p2p/
 - **Drag & Drop** — Drag files into the browser to share them
 - **Progress Tracking** — Real-time speed, ETA, and percentage display
 
-## How to Run Locally
+## How to Run
 
-### 1. Start the Backend
-Requires **Java 17** and **Maven**.
+Requires **Java 17+** and **Maven**. **No internet connection needed.**
+
+### 1. Start the server
 ```bash
 cd backend
-mvn clean spring-boot:run
+mvn spring-boot:run
 ```
-The WebSocket server starts at `ws://localhost:8080/signal`
 
-### 2. Start the Frontend
-Any static file server works.
-```bash
-cd frontend
-npx http-server
-```
-Open two browser tabs and test sending a file between them.
+### 2. Open in browser
+- **Same machine:** Open `http://localhost:8080`
+- **Other devices on LAN:** Open `http://<your-ip>:8080` (e.g. `http://192.168.1.5:8080`)
+
+To find your IP address:
+- **Windows:** `ipconfig` → look for "IPv4 Address" under your Wi-Fi adapter
+- **Mac/Linux:** `ifconfig` or `ip addr`
+
+### 3. Transfer a file
+Open two browser tabs (or two devices on the same Wi-Fi), one sends and one receives.
+
