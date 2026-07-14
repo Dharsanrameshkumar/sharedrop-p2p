@@ -9,7 +9,8 @@ backend/*.tar.gz
 backend/*.rar
 hs_err_pid*
 dependency-reduced-pom.xml
-.mvn/
+# Keep .mvn/wrapper/maven-wrapper.properties (needed for Render/CI)
+backend/.mvn/wrapper/maven-wrapper.jar
 
 # IDEs & Editor configurations
 .idea/
