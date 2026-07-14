@@ -220,11 +220,20 @@ class SignalingClient {
     }
 }
 
-// Create a single instance — auto-detect the server address.
-// This makes LAN-only mode work: if you open http://192.168.1.5:8080
-// the WebSocket connects to ws://192.168.1.5:8080/signal automatically.
-const _wsProtocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
-const _wsHost = location.hostname || 'localhost';
-const _wsPort = location.port || '8080';
-window.signaling = new SignalingClient(`${_wsProtocol}//${_wsHost}:${_wsPort}/signal`);
+// Create a single instance.
+// If SHAREDROP_CONFIG.signalingServerUrl is set, use that (for split deployments).
+// Otherwise, auto-detect from the page URL (same-origin / LAN mode).
+const _configUrl = window.SHAREDROP_CONFIG && window.SHAREDROP_CONFIG.signalingServerUrl;
+let _signalingUrl;
 
+if (_configUrl) {
+    _signalingUrl = _configUrl;
+    console.log('Using configured signaling server:', _signalingUrl);
+} else {
+    const _wsProtocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const _wsHost = location.hostname || 'localhost';
+    const _wsPort = location.port || '8080';
+    _signalingUrl = `${_wsProtocol}//${_wsHost}:${_wsPort}/signal`;
+}
+
+window.signaling = new SignalingClient(_signalingUrl);
