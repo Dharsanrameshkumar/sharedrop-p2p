@@ -972,6 +972,71 @@ body::before {
     margin-bottom: var(--space-xl);
 }
 
+/* ── Reconnect Banner ────────────────────────────────────── */
+.reconnect-banner {
+    display: none;
+    position: fixed;
+    top: 68px; /* below sticky header */
+    left: 0;
+    right: 0;
+    z-index: 90;
+    padding: var(--space-sm) var(--space-lg);
+    background: rgba(245, 158, 11, 0.12);
+    border-bottom: 1px solid rgba(245, 158, 11, 0.25);
+    backdrop-filter: blur(12px);
+    animation: fadeSlideIn 0.3s ease-out;
+}
+
+.reconnect-banner.visible {
+    display: block;
+}
+
+.reconnect-content {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-sm);
+    font-size: 0.85rem;
+    font-weight: 500;
+    color: var(--accent-orange);
+}
+
+.reconnect-content .spinner {
+    border-top-color: var(--accent-orange);
+}
+
+/* ── Integrity Badge ─────────────────────────────────────── */
+.integrity-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-xs);
+    padding: var(--space-xs) var(--space-md);
+    border-radius: var(--radius-full);
+    font-size: 0.8rem;
+    font-weight: 600;
+    margin-bottom: var(--space-lg);
+    background: var(--bg-glass);
+    border: 1px solid var(--border-subtle);
+    color: var(--text-secondary);
+    transition: all var(--transition-base);
+}
+
+.integrity-badge.verified {
+    background: rgba(16, 185, 129, 0.1);
+    border-color: rgba(16, 185, 129, 0.3);
+    color: var(--accent-green);
+}
+
+.integrity-badge.corrupted {
+    background: rgba(239, 68, 68, 0.1);
+    border-color: rgba(239, 68, 68, 0.3);
+    color: var(--accent-red);
+}
+
+.integrity-icon {
+    font-size: 1rem;
+}
+
 /* ── Error Toast ──────────────────────────────────────────── */
 .toast {
     position: fixed;

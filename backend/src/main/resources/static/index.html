@@ -32,6 +32,14 @@
         <!-- ═══ Main Content ═════════════════════════════════════ -->
         <main class="app-main">
 
+            <!-- ── Reconnecting Banner ────────────────────── -->
+            <div class="reconnect-banner" id="reconnect-banner">
+                <div class="reconnect-content">
+                    <div class="spinner"></div>
+                    <span id="reconnect-message">Reconnecting to server...</span>
+                </div>
+            </div>
+
             <!-- ── HOME VIEW ─────────────────────────────────── -->
             <section class="view active" id="view-home">
                 <div class="home-hero">
@@ -263,6 +271,10 @@
                     <div class="complete-icon">✓</div>
                     <div class="complete-title">File Received!</div>
                     <div class="complete-subtitle">Your download should begin automatically.</div>
+                    <div class="integrity-badge" id="integrity-badge">
+                        <span class="integrity-icon" id="integrity-icon"></span>
+                        <span class="integrity-text" id="integrity-text">Verifying integrity...</span>
+                    </div>
                     <button class="btn btn-primary btn-lg" id="btn-download-file" style="margin-bottom: var(--space-md);">
                         💾 Download File
                     </button>

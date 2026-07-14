@@ -3,6 +3,9 @@
  * 
  * Manages the WebSocket connection to the backend signaling server.
  * Handles room creation, joining, and relaying WebRTC handshake messages.
+ * 
+ * Includes automatic reconnection with exponential backoff if the
+ * connection drops unexpectedly.
  */
 
 class SignalingClient {
@@ -10,6 +13,14 @@ class SignalingClient {
         this.serverUrl = serverUrl;
         this.ws = null;
         this.currentRoomCode = null;
+
+        // Reconnection state
+        this._intentionalClose = false;
+        this._reconnectAttempts = 0;
+        this._maxReconnectAttempts = 10;
+        this._reconnectTimer = null;
+        this._baseDelay = 1000;   // 1 second
+        this._maxDelay = 30000;   // 30 seconds
 
         // Callbacks — set by app.js and webrtc.js
         this.onRoomCreated = null;
@@ -20,6 +31,8 @@ class SignalingClient {
         this.onAnswer = null;
         this.onIceCandidate = null;
         this.onError = null;
+        this.onReconnecting = null;  // (attempt, maxAttempts) => {}
+        this.onReconnected = null;   // () => {}
     }
 
     /**
@@ -33,22 +46,43 @@ class SignalingClient {
                 return;
             }
 
+            this._intentionalClose = false;
+
             try {
                 this.ws = new WebSocket(this.serverUrl);
                 
                 this.ws.onopen = () => {
                     console.log('Connected to signaling server');
+                    
+                    const wasReconnect = this._reconnectAttempts > 0;
+                    this._reconnectAttempts = 0;
+
+                    if (wasReconnect) {
+                        // Re-join the room if we were in one
+                        if (this.currentRoomCode && this.onReconnected) {
+                            this.onReconnected();
+                        }
+                    }
+
                     resolve();
                 };
 
                 this.ws.onerror = (err) => {
                     console.error('WebSocket Error:', err);
-                    reject(new Error('Failed to connect to server.'));
+                    // Only reject the initial connect promise, not reconnects
+                    if (this._reconnectAttempts === 0) {
+                        reject(new Error('Failed to connect to server.'));
+                    }
                 };
 
                 this.ws.onclose = () => {
                     console.log('Disconnected from signaling server');
                     this.ws = null;
+
+                    // Attempt reconnection if this wasn't intentional
+                    if (!this._intentionalClose) {
+                        this._scheduleReconnect();
+                    }
                 };
 
                 this.ws.onmessage = this._handleMessage.bind(this);
@@ -56,6 +90,36 @@ class SignalingClient {
                 reject(err);
             }
         });
+    }
+
+    /**
+     * Schedule a reconnection attempt with exponential backoff.
+     * Delay: 1s → 2s → 4s → 8s → ... → max 30s
+     */
+    _scheduleReconnect() {
+        if (this._reconnectAttempts >= this._maxReconnectAttempts) {
+            console.error('Max reconnection attempts reached. Giving up.');
+            if (this.onError) this.onError('Lost connection to server. Please refresh the page.');
+            return;
+        }
+
+        this._reconnectAttempts++;
+        const delay = Math.min(
+            this._baseDelay * Math.pow(2, this._reconnectAttempts - 1),
+            this._maxDelay
+        );
+
+        console.log(`Reconnecting in ${delay / 1000}s (attempt ${this._reconnectAttempts}/${this._maxReconnectAttempts})...`);
+        
+        if (this.onReconnecting) {
+            this.onReconnecting(this._reconnectAttempts, this._maxReconnectAttempts);
+        }
+
+        this._reconnectTimer = setTimeout(() => {
+            this.connect().catch(() => {
+                // connect() rejection is handled; backoff continues via onclose
+            });
+        }, delay);
     }
 
     /**
@@ -126,7 +190,16 @@ class SignalingClient {
         this._send({ type: 'ice-candidate', roomCode: this.currentRoomCode, payload: candidate });
     }
 
+    /**
+     * Intentionally disconnect. Suppresses auto-reconnect.
+     */
     disconnect() {
+        this._intentionalClose = true;
+        if (this._reconnectTimer) {
+            clearTimeout(this._reconnectTimer);
+            this._reconnectTimer = null;
+        }
+        this._reconnectAttempts = 0;
         if (this.ws) {
             this.ws.close();
             this.ws = null;
@@ -154,3 +227,4 @@ const _wsProtocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
 const _wsHost = location.hostname || 'localhost';
 const _wsPort = location.port || '8080';
 window.signaling = new SignalingClient(`${_wsProtocol}//${_wsHost}:${_wsPort}/signal`);
+

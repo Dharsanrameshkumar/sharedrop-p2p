@@ -35,18 +35,21 @@ class WebRTCManager {
     initialize(isSender) {
         this.isSender = isSender;
         
-        // ── LAN-ONLY MODE ──────────────────────────────────────
-        // Empty iceServers = devices must be on the same Wi-Fi / LAN.
-        // No internet connection is needed for this to work.
+        // ── STUN SERVERS ───────────────────────────────────────
+        // Google's free STUN servers help browsers discover their
+        // public IP addresses so WebRTC can work across different
+        // networks (behind NAT). LAN transfers still work fine.
         //
-        // To also support transfers ACROSS networks (over the internet),
-        // uncomment the STUN servers below:
-        // iceServers: [
-        //     { urls: 'stun:stun.l.google.com:19302' },
-        //     { urls: 'stun:stun1.l.google.com:19302' }
-        // ]
+        // For stricter NATs (symmetric NAT), you may also need a
+        // TURN relay server. Free option: https://www.metered.ca/tools/openrelay/
+        // Self-hosted option: https://github.com/coturn/coturn
+        // Add TURN like this:
+        //   { urls: 'turn:your-server:3478', username: 'user', credential: 'pass' }
         const configuration = {
-            iceServers: []
+            iceServers: [
+                { urls: 'stun:stun.l.google.com:19302' },
+                { urls: 'stun:stun1.l.google.com:19302' }
+            ]
         };
 
         this.rtc = new RTCPeerConnection(configuration);

@@ -465,6 +465,21 @@ window.signaling.onError = (errMsg) => {
     if (statusRecv) statusRecv.classList.remove('visible');
 };
 
+// When the WebSocket is reconnecting
+window.signaling.onReconnecting = (attempt, maxAttempts) => {
+    const banner = $('#reconnect-banner');
+    const message = $('#reconnect-message');
+    banner.classList.add('visible');
+    message.textContent = `Reconnecting to server... (attempt ${attempt}/${maxAttempts})`;
+};
+
+// When the WebSocket successfully reconnects
+window.signaling.onReconnected = () => {
+    const banner = $('#reconnect-banner');
+    banner.classList.remove('visible');
+    showToast('Reconnected to server!', 'success');
+};
+
 /* ══════════════════════════════════════════════════════════════
  *  Startup
  * ══════════════════════════════════════════════════════════════ */
@@ -483,37 +498,54 @@ window.webrtc.onConnectionStatus = (state) => {
     console.log("Connection state:", state);
 };
 
+/**
+ * Compute SHA-256 hash of a File or Blob using the Web Crypto API.
+ * Returns the hex string.
+ */
+async function computeSHA256(fileOrBlob) {
+    const buffer = await fileOrBlob.arrayBuffer();
+    const hashBuffer = await crypto.subtle.digest('SHA-256', buffer);
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
 // When the direct connection between browsers is ready
 window.webrtc.onDataChannelOpen = () => {
     if (window.webrtc.isSender) {
-        // Send file metadata first (name, size, type)
-        const metadata = {
-            fileName: selectedFile.name,
-            fileSize: selectedFile.size,
-            fileType: selectedFile.type
-        };
-        window.webrtc.sendMetadata({ type: 'metadata', ...metadata });
-        
-        // Update UI to show transfer progress
-        $('#send-connection-status').classList.remove('visible');
-        $('#send-transfer').classList.add('visible');
-        updateSendStep(3);
-        startTime = Date.now();
+        // Compute SHA-256 hash of the file, then send metadata + start transfer
+        computeSHA256(selectedFile).then(fileHash => {
+            const metadata = {
+                fileName: selectedFile.name,
+                fileSize: selectedFile.size,
+                fileType: selectedFile.type,
+                fileHash: fileHash
+            };
+            window.webrtc.sendMetadata({ type: 'metadata', ...metadata });
+            
+            // Update UI to show transfer progress
+            $('#send-connection-status').classList.remove('visible');
+            $('#send-transfer').classList.add('visible');
+            updateSendStep(3);
+            startTime = Date.now();
 
-        // Start sending the file in chunks
-        fileSender = new window.fileHandler.FileSender(
-            selectedFile, 
-            window.webrtc.dataChannel,
-            updateSenderProgress,
-            () => {
-                // File finished sending
-                window.webrtc.sendMetadata({ type: 'EOF' });
-                $('#send-transfer').classList.remove('visible');
-                $('#send-complete').classList.add('visible');
-                window.webrtc.close();
-            }
-        );
-        fileSender.start();
+            // Start sending the file in chunks
+            fileSender = new window.fileHandler.FileSender(
+                selectedFile, 
+                window.webrtc.dataChannel,
+                updateSenderProgress,
+                () => {
+                    // File finished sending
+                    window.webrtc.sendMetadata({ type: 'EOF' });
+                    $('#send-transfer').classList.remove('visible');
+                    $('#send-complete').classList.add('visible');
+                    window.webrtc.close();
+                }
+            );
+            fileSender.start();
+        }).catch(err => {
+            console.error('Failed to compute file hash:', err);
+            showToast('Failed to compute file hash', 'error');
+        });
     } else {
         // Receiver — update UI
         const status = $('#receive-connection-status');
@@ -559,6 +591,35 @@ window.webrtc.onMessage = (msgString) => {
                     $('#receive-transfer').classList.remove('visible');
                     $('#receive-complete').classList.add('visible');
                     window.webrtc.close();
+
+                    // Verify data integrity via SHA-256
+                    const badge = $('#integrity-badge');
+                    const icon = $('#integrity-icon');
+                    const text = $('#integrity-text');
+
+                    if (incomingMetadata.fileHash) {
+                        computeSHA256(blob).then(receivedHash => {
+                            if (receivedHash === incomingMetadata.fileHash) {
+                                badge.className = 'integrity-badge verified';
+                                icon.textContent = '✅';
+                                text.textContent = 'Integrity verified (SHA-256)';
+                            } else {
+                                badge.className = 'integrity-badge corrupted';
+                                icon.textContent = '❌';
+                                text.textContent = 'Integrity check failed — file may be corrupted';
+                                showToast('Warning: File integrity check failed!', 'error', 6000);
+                            }
+                        }).catch(() => {
+                            badge.className = 'integrity-badge corrupted';
+                            icon.textContent = '⚠️';
+                            text.textContent = 'Could not verify integrity';
+                        });
+                    } else {
+                        // Sender didn't provide a hash (older version)
+                        badge.className = 'integrity-badge';
+                        icon.textContent = 'ℹ️';
+                        text.textContent = 'Integrity check not available';
+                    }
                 }
             );
         }
