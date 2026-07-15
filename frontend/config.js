@@ -9,7 +9,6 @@
  */
 window.SHAREDROP_CONFIG = {
     // Set this to your signaling server URL for production deployment.
-    // Example: 'wss://your-backend.onrender.com/signal'
-    // Leave null to auto-detect (same-origin mode).
-    signalingServerUrl: null
+    // Update this URL to match your Render service URL from the dashboard.
+    signalingServerUrl: 'wss://sharedrop-p2p-2.onrender.com/signal'
 };
