@@ -1,0 +1,10 @@
+services:
+  - type: web
+    name: sharedrop-signaling-server
+    env: java
+    rootDir: backend
+    buildCommand: ./mvnw clean package -DskipTests
+    startCommand: java -jar target/signaling-server-1.0.0.jar
+    envVars:
+      - key: PORT
+        value: 10000
