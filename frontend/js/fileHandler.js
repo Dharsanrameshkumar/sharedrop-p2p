@@ -18,16 +18,12 @@
 'use strict';
 
 const CHUNK_SIZE = 256 * 1024; // 256KB per chunk (optimized for LAN speed)
-const BUFFER_FULL_THRESHOLD = 16 * 1024 * 1024; // 16MB — pause when buffer exceeds this
-const BUFFER_LOW_THRESHOLD  = 1 * 1024 * 1024;  // 1MB — resume when buffer drops to this
 
 /**
- * FileSender — reads a file in 256KB chunks and sends each chunk
+ * FileSender — reads a file in chunks and sends each chunk
  * through the WebRTC data channel.
  * 
- * Uses event-based flow control: when the outgoing buffer gets full,
- * we pause and wait for the 'bufferedamountlow' event instead of
- * polling with setTimeout (much faster).
+ * Uses event-based flow control (backpressure) to prevent OperationError.
  */
 class FileSender {
     constructor(file, dataChannel, onProgress, onComplete) {
@@ -37,92 +33,68 @@ class FileSender {
         this.onComplete = onComplete;
         this.offset = 0;
         this.paused = false;
-        this.started = false;
 
         // Set up event-based flow control
-        this.dataChannel.bufferedAmountLowThreshold = BUFFER_LOW_THRESHOLD;
+        // Default to a safe low threshold (e.g. 64KB) as suggested
+        this.dataChannel.bufferedAmountLowThreshold = 65536; 
+        
         this._onBufferLow = () => {
             if (this.paused) {
                 this.paused = false;
-                this.readSlice();
+                this._sendNextChunk(); // Resume sending
             }
         };
         this.dataChannel.addEventListener('bufferedamountlow', this._onBufferLow);
-
-        // When a chunk is done being read from disk, send it
-        this.fileReader = new FileReader();
-        this.fileReader.onload = (e) => {
-            const chunk = e.target.result;
-            
-            // Check buffer BEFORE sending to avoid OperationError
-            if (this.dataChannel.bufferedAmount > BUFFER_FULL_THRESHOLD) {
-                // Buffer is too full — wait for it to drain, then retry this chunk
-                this.paused = true;
-                // Store the chunk to send when buffer drains
-                this._pendingChunk = chunk;
-                const origHandler = this._onBufferLow;
-                this.dataChannel.removeEventListener('bufferedamountlow', origHandler);
-                this._onBufferLow = () => {
-                    this.dataChannel.removeEventListener('bufferedamountlow', this._onBufferLow);
-                    this._onBufferLow = origHandler;
-                    this.dataChannel.addEventListener('bufferedamountlow', this._onBufferLow);
-                    this.paused = false;
-                    // Now send the pending chunk
-                    this._sendChunk(this._pendingChunk);
-                    this._pendingChunk = null;
-                };
-                this.dataChannel.addEventListener('bufferedamountlow', this._onBufferLow);
-                return;
-            }
-
-            this._sendChunk(chunk);
-        };
-
-        this.fileReader.onerror = (err) => console.error("Error reading file:", err);
-    }
-
-    _sendChunk(chunk) {
-        try {
-            this.dataChannel.send(chunk);
-            this.offset += chunk.byteLength;
-
-            if (this.onProgress) {
-                this.onProgress(this.offset, this.file.size);
-            }
-
-            if (this.offset < this.file.size) {
-                // Check if buffer is getting full after sending
-                if (this.dataChannel.bufferedAmount > BUFFER_FULL_THRESHOLD) {
-                    this.paused = true; // Wait for 'bufferedamountlow' event
-                } else {
-                    this.readSlice(); // Continue immediately
-                }
-            } else {
-                this.cleanup();
-                if (this.onComplete) this.onComplete();
-            }
-        } catch (err) {
-            console.error("Error sending chunk:", err);
-            // If send failed, pause and retry when buffer drains
-            this.paused = true;
-        }
     }
 
     start() {
         this.offset = 0;
         this.paused = false;
-        this.started = true;
-        this.readSlice();
+        this._sendNextChunk();
     }
 
-    readSlice() {
-        if (!this.started) return;
-        const slice = this.file.slice(this.offset, this.offset + CHUNK_SIZE);
-        this.fileReader.readAsArrayBuffer(slice);
+    async _sendNextChunk() {
+        if (this.offset >= this.file.size) {
+            this.cleanup();
+            if (this.onComplete) this.onComplete();
+            return;
+        }
+
+        try {
+            // Check if buffer is getting full before sending
+            // Wait for bufferedamountlow event to resume
+            if (this.dataChannel.bufferedAmount > this.dataChannel.bufferedAmountLowThreshold) {
+                this.paused = true;
+                return;
+            }
+
+            const slice = this.file.slice(this.offset, this.offset + CHUNK_SIZE);
+            const buffer = await slice.arrayBuffer(); // Clean async read instead of FileReader
+            
+            this.dataChannel.send(buffer);
+            this.offset += buffer.byteLength;
+
+            if (this.onProgress) {
+                this.onProgress(this.offset, this.file.size);
+            }
+
+            // Continue sending next chunk if not paused
+            if (!this.paused) {
+                // Stack won't overflow because of await arrayBuffer(), but we can still use setTimeout for good measure
+                setTimeout(() => this._sendNextChunk(), 0);
+            }
+
+        } catch (err) {
+            if (err.name === 'OperationError') {
+                this.paused = true;
+                console.warn("Buffer full, waiting for bufferedamountlow event...");
+            } else {
+                console.error("Send error:", err);
+            }
+        }
     }
 
     cleanup() {
-        this.started = false;
         this.dataChannel.removeEventListener('bufferedamountlow', this._onBufferLow);
     }
 }
