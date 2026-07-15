@@ -91,16 +91,7 @@ class WebRTCManager {
      * Set up event listeners on the data channel.
      */
     setupDataChannelEvents() {
-        this.dataChannel.onopen = async () => {
-            // Verify both peers are on the same local network before proceeding
-            const sameNetwork = await this.verifySameNetwork();
-            if (!sameNetwork) {
-                console.warn('Connection blocked: peers are NOT on the same WiFi network.');
-                if (this.onNetworkMismatch) this.onNetworkMismatch();
-                this.close();
-                return;
-            }
-            console.log('✅ Same-network check passed — peers are on the same WiFi.');
+        this.dataChannel.onopen = () => {
             if (this.onDataChannelOpen) this.onDataChannelOpen();
         };
 
@@ -117,63 +108,6 @@ class WebRTCManager {
                 if (this.onBinaryMessage) this.onBinaryMessage(event.data);
             }
         };
-    }
-
-    /**
-     * Check if both peers are on the same local network.
-     * Inspects the selected ICE candidate pair — if both sides are
-     * "host" type candidates with private IPs, they're on the same WiFi.
-     * Returns false if routed through STUN (internet) or TURN (relay).
-     */
-    async verifySameNetwork() {
-        if (!this.rtc) return false;
-
-        try {
-            const stats = await this.rtc.getStats();
-            let selectedPairId = null;
-
-            // Find the active transport's selected candidate pair
-            stats.forEach(report => {
-                if (report.type === 'transport' && report.selectedCandidatePairId) {
-                    selectedPairId = report.selectedCandidatePairId;
-                }
-            });
-
-            if (!selectedPairId) {
-                // Fallback: find a succeeded candidate-pair
-                stats.forEach(report => {
-                    if (report.type === 'candidate-pair' && report.state === 'succeeded') {
-                        selectedPairId = report.id;
-                    }
-                });
-            }
-
-            if (!selectedPairId) {
-                console.warn('Could not determine ICE candidate pair.');
-                return false;
-            }
-
-            const pair = stats.get(selectedPairId);
-            if (!pair) return false;
-
-            const localCandidate = stats.get(pair.localCandidateId);
-            const remoteCandidate = stats.get(pair.remoteCandidateId);
-
-            if (!localCandidate || !remoteCandidate) return false;
-
-            console.log(`ICE path: local=${localCandidate.candidateType}(${localCandidate.address}) → remote=${remoteCandidate.candidateType}(${remoteCandidate.address})`);
-
-            // Both must be "host" type = direct LAN connection
-            // "srflx" = STUN (internet NAT traversal)
-            // "relay" = TURN (relayed through internet server)
-            const localIsHost = localCandidate.candidateType === 'host';
-            const remoteIsHost = remoteCandidate.candidateType === 'host';
-
-            return localIsHost && remoteIsHost;
-        } catch (err) {
-            console.error('Network verification error:', err);
-            return false;
-        }
     }
 
     /**
