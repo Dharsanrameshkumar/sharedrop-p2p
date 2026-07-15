@@ -3,6 +3,8 @@
  * 
  * Handles the UI: view switching, file selection, drag & drop,
  * room codes, progress bars, and toast notifications.
+ * 
+ * Supports multiple file selection and sequential transfer.
  */
 
 'use strict';
@@ -28,12 +30,12 @@ const logoHomeLink = $('#logo-home-link');
 const btnBackSend = $('#btn-back-send');
 const dropZone = $('#drop-zone');
 const fileInput = $('#file-input');
-const fileInfo = $('#file-info');
-const fileName = $('#file-name');
-const fileSize = $('#file-size');
-const fileType = $('#file-type');
-const fileTypeIcon = $('#file-type-icon');
-const btnRemoveFile = $('#btn-remove-file');
+const fileListContainer = $('#file-list-container');
+const fileListEl = $('#file-list');
+const fileListCount = $('#file-list-count');
+const fileListTotal = $('#file-list-total');
+const btnClearAll = $('#btn-clear-all');
+const btnAddMore = $('#btn-add-more');
 const btnCreateRoom = $('#btn-create-room');
 const roomCodeSection = $('#room-code-section');
 const roomCodeValue = $('#room-code-value');
@@ -46,7 +48,7 @@ const btnBackReceive = $('#btn-back-receive');
 const roomCodeInputs = $$('#room-code-inputs input');
 const btnJoinRoom = $('#btn-join-room');
 const btnReceiveAnother = $('#btn-receive-another');
-const btnDownloadFile = $('#btn-download-file');
+const btnDownloadAll = $('#btn-download-all');
 
 // Toast
 const toastEl = $('#toast');
@@ -56,8 +58,8 @@ const toastMessage = $('#toast-message');
  *  State
  * ══════════════════════════════════════════════════════════════ */
 
-const MAX_FILE_SIZE = 1 * 1024 * 1024 * 1024; // 1 GB
-let selectedFile = null;
+const MAX_FILE_SIZE = 1 * 1024 * 1024 * 1024; // 1 GB per file
+let selectedFiles = []; // Array of File objects
 let toastTimeout = null;
 
 /* ══════════════════════════════════════════════════════════════
@@ -112,16 +114,19 @@ btnGoReceive.addEventListener('keydown', (e) => {
 });
 
 /* ══════════════════════════════════════════════════════════════
- *  File Selection & Drag-and-Drop
+ *  File Selection & Drag-and-Drop (Multi-File)
  * ══════════════════════════════════════════════════════════════ */
 
 // Click the drop zone to open file picker
 dropZone.addEventListener('click', () => fileInput.click());
 
-// When a file is selected via the file picker
+// "Add More Files" button
+btnAddMore.addEventListener('click', () => fileInput.click());
+
+// When files are selected via the file picker
 fileInput.addEventListener('change', (e) => {
     if (e.target.files.length > 0) {
-        handleFileSelect(e.target.files[0]);
+        addFiles(Array.from(e.target.files));
     }
 });
 
@@ -140,48 +145,96 @@ dropZone.addEventListener('drop', (e) => {
     e.preventDefault();
     dropZone.classList.remove('drag-over');
     if (e.dataTransfer.files.length > 0) {
-        handleFileSelect(e.dataTransfer.files[0]);
+        addFiles(Array.from(e.dataTransfer.files));
     }
 });
 
-function handleFileSelect(file) {
-    // Check file size
-    if (file.size > MAX_FILE_SIZE) {
-        showToast(`File too large! Max size is 1 GB. Your file: ${formatBytes(file.size)}`, 'error');
+/**
+ * Add files to the selected files list.
+ * Validates each file and updates the UI.
+ */
+function addFiles(newFiles) {
+    let rejected = 0;
+
+    for (const file of newFiles) {
+        if (file.size > MAX_FILE_SIZE) {
+            showToast(`"${file.name}" is too large (${formatBytes(file.size)}). Max 1 GB per file.`, 'error');
+            rejected++;
+            continue;
+        }
+        if (file.size === 0) {
+            showToast(`"${file.name}" is empty.`, 'error');
+            rejected++;
+            continue;
+        }
+        // Avoid duplicates (same name + size)
+        const isDuplicate = selectedFiles.some(f => f.name === file.name && f.size === file.size);
+        if (isDuplicate) continue;
+
+        selectedFiles.push(file);
+    }
+
+    fileInput.value = ''; // Reset input so same file can be re-added
+    updateFileListUI();
+}
+
+/**
+ * Remove a file from the list by index.
+ */
+function removeFile(index) {
+    selectedFiles.splice(index, 1);
+    updateFileListUI();
+}
+
+/**
+ * Update the file list UI to reflect current selectedFiles.
+ */
+function updateFileListUI() {
+    if (selectedFiles.length === 0) {
+        fileListContainer.classList.remove('visible');
+        dropZone.style.display = '';
+        btnCreateRoom.disabled = true;
         return;
     }
 
-    if (file.size === 0) {
-        showToast('Cannot share an empty file.', 'error');
-        return;
-    }
-
-    selectedFile = file;
-
-    // Update the file info display
-    fileName.textContent = file.name;
-    fileSize.textContent = formatBytes(file.size);
-    fileType.textContent = file.type || 'Unknown type';
-    fileTypeIcon.textContent = getFileIcon(file.type, file.name);
-
-    // Show file info, hide drop zone
-    fileInfo.classList.add('visible');
+    // Hide drop zone, show file list
     dropZone.style.display = 'none';
+    fileListContainer.classList.add('visible');
     btnCreateRoom.disabled = false;
+
+    // Update header
+    const totalSize = selectedFiles.reduce((sum, f) => sum + f.size, 0);
+    fileListCount.textContent = `${selectedFiles.length} file${selectedFiles.length !== 1 ? 's' : ''}`;
+    fileListTotal.textContent = formatBytes(totalSize);
+
+    // Rebuild list
+    fileListEl.innerHTML = '';
+    selectedFiles.forEach((file, index) => {
+        const item = document.createElement('div');
+        item.className = 'file-list-item';
+        item.innerHTML = `
+            <span class="fl-icon">${getFileIcon(file.type, file.name)}</span>
+            <span class="fl-name" title="${file.name}">${file.name}</span>
+            <span class="fl-size">${formatBytes(file.size)}</span>
+            <button class="fl-remove" title="Remove" data-index="${index}">✕</button>
+        `;
+        fileListEl.appendChild(item);
+    });
+
+    // Attach remove handlers
+    fileListEl.querySelectorAll('.fl-remove').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            removeFile(parseInt(btn.dataset.index));
+        });
+    });
 }
 
-// Remove selected file
-btnRemoveFile.addEventListener('click', () => {
-    clearFileSelection();
+// Clear all files
+btnClearAll.addEventListener('click', () => {
+    selectedFiles = [];
+    updateFileListUI();
 });
-
-function clearFileSelection() {
-    selectedFile = null;
-    fileInput.value = '';
-    fileInfo.classList.remove('visible');
-    dropZone.style.display = '';
-    btnCreateRoom.disabled = true;
-}
 
 /* ══════════════════════════════════════════════════════════════
  *  Room Code Input (Receive View)
@@ -266,7 +319,7 @@ btnCopyCode.addEventListener('click', async () => {
 });
 
 /* ══════════════════════════════════════════════════════════════
- *  Step Indicator (1. Select File → 2. Share Code → 3. Transfer)
+ *  Step Indicator (1. Select Files → 2. Share Code → 3. Transfer)
  * ══════════════════════════════════════════════════════════════ */
 
 function updateSendStep(activeStep) {
@@ -306,11 +359,15 @@ function showToast(message, type = 'info', duration = 4000) {
  * ══════════════════════════════════════════════════════════════ */
 
 function resetSendView() {
-    clearFileSelection();
+    selectedFiles = [];
+    fileInput.value = '';
+    fileListContainer.classList.remove('visible');
+    fileListEl.innerHTML = '';
+    dropZone.style.display = '';
     roomCodeSection.classList.remove('visible');
     btnCreateRoom.style.display = '';
     btnCreateRoom.disabled = true;
-    dropZone.style.display = '';
+    btnCreateRoom.textContent = 'Create Share Link';
     updateSendStep(1);
 
     const sendTransfer = $('#send-transfer');
@@ -322,8 +379,10 @@ function resetSendView() {
 }
 
 function resetReceiveView() {
-    roomCodeInputs.forEach(input => input.value = '');
+    roomCodeInputs.forEach(input => { input.value = ''; input.disabled = false; });
     btnJoinRoom.disabled = true;
+    btnJoinRoom.style.display = '';
+    btnJoinRoom.textContent = 'Connect to Sender';
 
     const receiveTransfer = $('#receive-transfer');
     const receiveComplete = $('#receive-complete');
@@ -366,7 +425,7 @@ function getFileIcon(mimeType, name) {
 
 // "Create Share Link" button (Sender)
 btnCreateRoom.addEventListener('click', async () => {
-    if (!selectedFile) return;
+    if (selectedFiles.length === 0) return;
 
     btnCreateRoom.disabled = true;
     btnCreateRoom.textContent = 'Connecting...';
@@ -409,6 +468,7 @@ window.signaling.onRoomCreated = (roomCode) => {
     roomCodeValue.textContent = roomCode.toUpperCase();
     roomCodeSection.classList.add('visible');
     btnCreateRoom.style.display = 'none';
+    fileListContainer.classList.remove('visible');
     dropZone.style.display = 'none';
     updateSendStep(2);
 
@@ -487,12 +547,25 @@ window.signaling.onReconnected = () => {
 console.log('⚡ ShareDrop - P2P File Sharing');
 
 /* ══════════════════════════════════════════════════════════════
- *  WebRTC & File Transfer — the actual file sending/receiving
+ *  WebRTC & File Transfer — Multi-file send/receive
  * ══════════════════════════════════════════════════════════════ */
+
 let fileSender = null;
 let fileReceiver = null;
-let incomingMetadata = null;
 let startTime = 0;
+
+// Sender state
+let sendFileIndex = 0;         // Current file being sent
+let totalBytesSent = 0;        // Bytes sent across ALL files
+let totalBytesAllFiles = 0;    // Sum of all file sizes
+
+// Receiver state
+let receivedFiles = [];        // Array of { name, blob }
+let batchMetadata = null;      // Batch info from sender
+let currentFileMetadata = null;
+let receiveFileIndex = 0;
+let totalBytesReceived = 0;
+let totalBytesExpected = 0;
 
 window.webrtc.onConnectionStatus = (state) => {
     console.log("Connection state:", state);
@@ -500,15 +573,13 @@ window.webrtc.onConnectionStatus = (state) => {
 
 /**
  * Compute SHA-256 hash of a File or Blob using streaming chunks.
- * Reads the file in 1MB pieces to avoid loading the entire file into memory,
- * which would crash the browser on large files (500MB+).
+ * Reads the file in 1MB pieces to avoid loading the entire file into memory.
  * Returns the hex string.
  */
 async function computeSHA256(fileOrBlob) {
-    const HASH_CHUNK_SIZE = 1024 * 1024; // 1MB chunks for hashing
+    const HASH_CHUNK_SIZE = 1024 * 1024;
     const fileSize = fileOrBlob.size;
 
-    // For small files (< 10MB), the simple approach is fine
     if (fileSize < 10 * 1024 * 1024) {
         const buffer = await fileOrBlob.arrayBuffer();
         const hashBuffer = await crypto.subtle.digest('SHA-256', buffer);
@@ -516,12 +587,8 @@ async function computeSHA256(fileOrBlob) {
         return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
     }
 
-    // For large files, read in chunks and hash incrementally
-    // We collect all chunks into a single ArrayBuffer at the end
-    // but process reading in pieces to avoid FileReader memory spikes
     const chunks = [];
     let offset = 0;
-
     while (offset < fileSize) {
         const slice = fileOrBlob.slice(offset, offset + HASH_CHUNK_SIZE);
         const buffer = await slice.arrayBuffer();
@@ -529,7 +596,6 @@ async function computeSHA256(fileOrBlob) {
         offset += HASH_CHUNK_SIZE;
     }
 
-    // Combine chunks into a single buffer for hashing
     const totalLength = chunks.reduce((sum, chunk) => sum + chunk.length, 0);
     const combined = new Uint8Array(totalLength);
     let pos = 0;
@@ -543,124 +609,357 @@ async function computeSHA256(fileOrBlob) {
     return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
 }
 
+/**
+ * SENDER: Start sending all selected files sequentially.
+ */
+async function startBatchSend() {
+    sendFileIndex = 0;
+    totalBytesSent = 0;
+    totalBytesAllFiles = selectedFiles.reduce((sum, f) => sum + f.size, 0);
+
+    // Send batch metadata first
+    const batchInfo = {
+        type: 'batch-start',
+        fileCount: selectedFiles.length,
+        totalSize: totalBytesAllFiles,
+        files: selectedFiles.map(f => ({
+            fileName: f.name,
+            fileSize: f.size,
+            fileType: f.type
+        }))
+    };
+    window.webrtc.sendMetadata(batchInfo);
+
+    // Update UI
+    $('#send-connection-status').classList.remove('visible');
+    $('#send-transfer').classList.add('visible');
+    updateSendStep(3);
+    startTime = Date.now();
+
+    // Show/hide overall progress based on file count
+    const overallProgress = $('#send-overall-progress');
+    if (selectedFiles.length > 1) {
+        overallProgress.style.display = '';
+    } else {
+        overallProgress.style.display = 'none';
+    }
+
+    // Start sending the first file
+    sendNextFile();
+}
+
+/**
+ * SENDER: Send the next file in the queue.
+ */
+async function sendNextFile() {
+    if (sendFileIndex >= selectedFiles.length) {
+        // All files sent!
+        window.webrtc.sendMetadata({ type: 'batch-complete' });
+        $('#send-transfer').classList.remove('visible');
+        $('#send-complete').classList.add('visible');
+        $('#send-complete-subtitle').textContent = 
+            `${selectedFiles.length} file${selectedFiles.length !== 1 ? 's' : ''} successfully delivered.`;
+        window.webrtc.close();
+        return;
+    }
+
+    const file = selectedFiles[sendFileIndex];
+
+    // Update current file label
+    $('#send-current-file').textContent = 
+        `Sending file ${sendFileIndex + 1} of ${selectedFiles.length}: ${file.name}`;
+
+    // Compute hash and send file metadata
+    let fileHash = null;
+    try {
+        fileHash = await computeSHA256(file);
+    } catch (err) {
+        console.error('Hash computation failed:', err);
+    }
+
+    const metadata = {
+        type: 'file-start',
+        fileIndex: sendFileIndex,
+        fileName: file.name,
+        fileSize: file.size,
+        fileType: file.type,
+        fileHash: fileHash
+    };
+    window.webrtc.sendMetadata(metadata);
+
+    // Reset per-file progress
+    $('#send-progress-percent').textContent = '0%';
+    $('#send-progress-fill').style.width = '0%';
+
+    // Start sending chunks
+    fileSender = new window.fileHandler.FileSender(
+        file,
+        window.webrtc.dataChannel,
+        (sentBytes, totalBytes) => {
+            // Per-file progress
+            const percent = Math.round((sentBytes / totalBytes) * 100);
+            $('#send-progress-percent').textContent = `${percent}%`;
+            $('#send-progress-fill').style.width = `${percent}%`;
+
+            // Overall progress
+            const overallSent = totalBytesSent + sentBytes;
+            const overallPercent = Math.round((overallSent / totalBytesAllFiles) * 100);
+            $('#send-overall-percent').textContent = `${overallPercent}%`;
+            $('#send-overall-fill').style.width = `${overallPercent}%`;
+
+            // Stats
+            const elapsed = (Date.now() - startTime) / 1000;
+            if (elapsed > 0) {
+                const speed = overallSent / elapsed;
+                $('#send-speed').textContent = `${formatBytes(speed)}/s`;
+                $('#send-transferred').textContent = `${formatBytes(overallSent)} / ${formatBytes(totalBytesAllFiles)}`;
+                const remaining = totalBytesAllFiles - overallSent;
+                const etaSeconds = Math.round(remaining / speed);
+                $('#send-eta').textContent = formatEta(etaSeconds);
+            }
+        },
+        () => {
+            // File complete — send end marker and move to next
+            totalBytesSent += file.size;
+            window.webrtc.sendMetadata({ type: 'file-end', fileIndex: sendFileIndex });
+            sendFileIndex++;
+            sendNextFile();
+        }
+    );
+    fileSender.start();
+}
+
 // When the direct connection between browsers is ready
 window.webrtc.onDataChannelOpen = () => {
     if (window.webrtc.isSender) {
-        // Compute SHA-256 hash of the file, then send metadata + start transfer
-        computeSHA256(selectedFile).then(fileHash => {
-            const metadata = {
-                fileName: selectedFile.name,
-                fileSize: selectedFile.size,
-                fileType: selectedFile.type,
-                fileHash: fileHash
-            };
-            window.webrtc.sendMetadata({ type: 'metadata', ...metadata });
-            
-            // Update UI to show transfer progress
-            $('#send-connection-status').classList.remove('visible');
-            $('#send-transfer').classList.add('visible');
-            updateSendStep(3);
-            startTime = Date.now();
-
-            // Start sending the file in chunks
-            fileSender = new window.fileHandler.FileSender(
-                selectedFile, 
-                window.webrtc.dataChannel,
-                updateSenderProgress,
-                () => {
-                    // File finished sending
-                    window.webrtc.sendMetadata({ type: 'EOF' });
-                    $('#send-transfer').classList.remove('visible');
-                    $('#send-complete').classList.add('visible');
-                    window.webrtc.close();
-                }
-            );
-            fileSender.start();
-        }).catch(err => {
-            console.error('Failed to compute file hash:', err);
-            showToast('Failed to compute file hash', 'error');
-        });
+        startBatchSend();
     } else {
         // Receiver — update UI
         const status = $('#receive-connection-status');
         status.className = 'connection-status visible connected';
         status.style.color = 'var(--accent-green)';
-        status.querySelector('.status-text').textContent = 'Connected! Waiting for file...';
+        status.querySelector('.status-text').textContent = 'Connected! Waiting for files...';
     }
 };
 
-// When we receive a text message (JSON metadata)
+/**
+ * RECEIVER: Handle incoming messages (metadata, file markers).
+ */
 window.webrtc.onMessage = (msgString) => {
     try {
         const msg = JSON.parse(msgString);
-        if (msg.type === 'metadata') {
-            incomingMetadata = msg;
-            
-            // Show incoming file info
-            $('#receive-connection-status').classList.remove('visible');
-            $('#incoming-file-info').classList.add('visible');
-            $('#incoming-file-name').textContent = msg.fileName;
-            $('#incoming-file-size').textContent = formatBytes(msg.fileSize);
-            $('#incoming-file-type').textContent = msg.fileType || 'Unknown';
-            $('#receive-transfer').classList.add('visible');
-            
-            startTime = Date.now();
-            
-            // Prepare to receive the file chunks
-            fileReceiver = new window.fileHandler.FileReceiver(
-                msg,
-                updateReceiverProgress,
-                (blob) => {
-                    // File fully received — set up download button
-                    const url = URL.createObjectURL(blob);
-                    btnDownloadFile.onclick = () => {
-                        const a = document.createElement('a');
-                        a.href = url;
-                        a.download = incomingMetadata.fileName;
-                        a.click();
-                        
-                        setTimeout(() => window.URL.revokeObjectURL(url), 1000);
-                    };
-                    
-                    $('#receive-transfer').classList.remove('visible');
-                    $('#receive-complete').classList.add('visible');
-                    window.webrtc.close();
 
-                    // Verify data integrity via SHA-256
-                    const badge = $('#integrity-badge');
-                    const icon = $('#integrity-icon');
-                    const text = $('#integrity-text');
-
-                    if (incomingMetadata.fileHash) {
-                        computeSHA256(blob).then(receivedHash => {
-                            if (receivedHash === incomingMetadata.fileHash) {
-                                badge.className = 'integrity-badge verified';
-                                icon.textContent = '✅';
-                                text.textContent = 'Integrity verified (SHA-256)';
-                            } else {
-                                badge.className = 'integrity-badge corrupted';
-                                icon.textContent = '❌';
-                                text.textContent = 'Integrity check failed — file may be corrupted';
-                                showToast('Warning: File integrity check failed!', 'error', 6000);
-                            }
-                        }).catch(() => {
-                            badge.className = 'integrity-badge corrupted';
-                            icon.textContent = '⚠️';
-                            text.textContent = 'Could not verify integrity';
-                        });
-                    } else {
-                        // Sender didn't provide a hash (older version)
-                        badge.className = 'integrity-badge';
-                        icon.textContent = 'ℹ️';
-                        text.textContent = 'Integrity check not available';
-                    }
-                }
-            );
+        switch (msg.type) {
+            case 'batch-start':
+                handleBatchStart(msg);
+                break;
+            case 'file-start':
+                handleFileStart(msg);
+                break;
+            case 'file-end':
+                // File receiver handles this via byte counting
+                break;
+            case 'batch-complete':
+                handleBatchComplete();
+                break;
+            default:
+                console.warn('Unknown message type:', msg.type);
         }
     } catch (e) {
         console.error("Failed to parse message", e);
     }
 };
+
+/**
+ * RECEIVER: Batch of files is starting.
+ */
+function handleBatchStart(msg) {
+    batchMetadata = msg;
+    receivedFiles = [];
+    receiveFileIndex = 0;
+    totalBytesReceived = 0;
+    totalBytesExpected = msg.totalSize;
+    startTime = Date.now();
+
+    // Show incoming file info
+    $('#receive-connection-status').classList.remove('visible');
+    const incomingInfo = $('#incoming-file-info');
+    incomingInfo.classList.add('visible');
+
+    $('#incoming-batch-title').textContent = 
+        `${msg.fileCount} file${msg.fileCount !== 1 ? 's' : ''} incoming`;
+    $('#incoming-batch-meta').textContent = `Total: ${formatBytes(msg.totalSize)}`;
+
+    // Populate incoming file list
+    const listEl = $('#incoming-file-list');
+    listEl.innerHTML = '';
+    msg.files.forEach((f, i) => {
+        const item = document.createElement('div');
+        item.className = 'incoming-file-item';
+        item.id = `incoming-file-${i}`;
+        item.innerHTML = `
+            <span class="ifi-icon">${getFileIcon(f.fileType, f.fileName)}</span>
+            <span class="ifi-name" title="${f.fileName}">${f.fileName}</span>
+            <span class="ifi-size">${formatBytes(f.fileSize)}</span>
+            <span class="ifi-status" id="ifi-status-${i}">⏳</span>
+        `;
+        listEl.appendChild(item);
+    });
+
+    // Show transfer progress
+    $('#receive-transfer').classList.add('visible');
+
+    // Show/hide overall progress
+    const overallProgress = $('#receive-overall-progress');
+    if (msg.fileCount > 1) {
+        overallProgress.style.display = '';
+    } else {
+        overallProgress.style.display = 'none';
+    }
+}
+
+/**
+ * RECEIVER: A new file is starting.
+ */
+function handleFileStart(msg) {
+    currentFileMetadata = msg;
+    receiveFileIndex = msg.fileIndex;
+
+    // Update current file label
+    const total = batchMetadata ? batchMetadata.fileCount : 1;
+    $('#receive-current-file').textContent = 
+        `Receiving file ${receiveFileIndex + 1} of ${total}: ${msg.fileName}`;
+
+    // Reset per-file progress
+    $('#receive-progress-percent').textContent = '0%';
+    $('#receive-progress-fill').style.width = '0%';
+
+    // Update status icon
+    const statusEl = $(`#ifi-status-${receiveFileIndex}`);
+    if (statusEl) statusEl.textContent = '⬇️';
+
+    // Create receiver for this file
+    fileReceiver = new window.fileHandler.FileReceiver(
+        msg,
+        (receivedBytes, fileTotal) => {
+            // Per-file progress
+            const percent = Math.round((receivedBytes / fileTotal) * 100);
+            $('#receive-progress-percent').textContent = `${percent}%`;
+            $('#receive-progress-fill').style.width = `${percent}%`;
+
+            // Overall progress
+            const overallReceived = totalBytesReceived + receivedBytes;
+            const overallPercent = Math.round((overallReceived / totalBytesExpected) * 100);
+            $('#receive-overall-percent').textContent = `${overallPercent}%`;
+            $('#receive-overall-fill').style.width = `${overallPercent}%`;
+
+            // Stats
+            const elapsed = (Date.now() - startTime) / 1000;
+            if (elapsed > 0) {
+                const speed = overallReceived / elapsed;
+                $('#receive-speed').textContent = `${formatBytes(speed)}/s`;
+                $('#receive-received').textContent = `${formatBytes(overallReceived)} / ${formatBytes(totalBytesExpected)}`;
+                const remaining = totalBytesExpected - overallReceived;
+                const etaSeconds = Math.round(remaining / speed);
+                $('#receive-eta').textContent = formatEta(etaSeconds);
+            }
+        },
+        (blob) => {
+            // File received completely
+            totalBytesReceived += blob.size;
+            receivedFiles.push({ name: currentFileMetadata.fileName, blob: blob, hash: currentFileMetadata.fileHash });
+
+            // Update status icon
+            const statusEl = $(`#ifi-status-${receiveFileIndex}`);
+            if (statusEl) statusEl.textContent = '✅';
+        }
+    );
+}
+
+/**
+ * RECEIVER: All files have been received.
+ */
+function handleBatchComplete() {
+    $('#receive-transfer').classList.remove('visible');
+    $('#receive-complete').classList.add('visible');
+    
+    const count = receivedFiles.length;
+    $('#receive-complete-subtitle').textContent = 
+        `${count} file${count !== 1 ? 's' : ''} received successfully.`;
+
+    window.webrtc.close();
+
+    // Verify integrity of all files
+    verifyAllFiles();
+
+    // Set up "Download All" button
+    btnDownloadAll.textContent = `💾 Download ${count > 1 ? 'All ' + count + ' Files' : 'File'}`;
+    btnDownloadAll.onclick = () => {
+        receivedFiles.forEach((f, i) => {
+            setTimeout(() => {
+                const url = URL.createObjectURL(f.blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = f.name;
+                a.click();
+                setTimeout(() => URL.revokeObjectURL(url), 5000);
+            }, i * 500); // Stagger downloads to avoid browser blocking
+        });
+    };
+
+    // Auto-download if single file
+    if (count === 1) {
+        btnDownloadAll.click();
+    }
+}
+
+/**
+ * Verify SHA-256 integrity of all received files.
+ */
+async function verifyAllFiles() {
+    const badge = $('#integrity-badge');
+    const icon = $('#integrity-icon');
+    const text = $('#integrity-text');
+
+    const filesWithHash = receivedFiles.filter(f => f.hash);
+    if (filesWithHash.length === 0) {
+        badge.className = 'integrity-badge';
+        icon.textContent = 'ℹ️';
+        text.textContent = 'Integrity check not available';
+        return;
+    }
+
+    badge.className = 'integrity-badge';
+    icon.textContent = '⏳';
+    text.textContent = `Verifying ${filesWithHash.length} file${filesWithHash.length !== 1 ? 's' : ''}...`;
+
+    let verified = 0;
+    let failed = 0;
+
+    for (const f of filesWithHash) {
+        try {
+            const hash = await computeSHA256(f.blob);
+            if (hash === f.hash) {
+                verified++;
+            } else {
+                failed++;
+            }
+        } catch {
+            failed++;
+        }
+    }
+
+    if (failed === 0) {
+        badge.className = 'integrity-badge verified';
+        icon.textContent = '✅';
+        text.textContent = `All ${verified} file${verified !== 1 ? 's' : ''} verified (SHA-256)`;
+    } else {
+        badge.className = 'integrity-badge corrupted';
+        icon.textContent = '❌';
+        text.textContent = `${failed} file${failed !== 1 ? 's' : ''} failed integrity check`;
+        showToast('Warning: Some files may be corrupted!', 'error', 6000);
+    }
+}
 
 // When we receive binary data (file chunk)
 window.webrtc.onBinaryMessage = (arrayBuffer) => {
@@ -676,40 +975,6 @@ window.webrtc.onDataChannelClose = () => {
 /* ══════════════════════════════════════════════════════════════
  *  Progress Tracking — speed, ETA, percentage
  * ══════════════════════════════════════════════════════════════ */
-
-function updateSenderProgress(sentBytes, totalBytes) {
-    const percent = Math.round((sentBytes / totalBytes) * 100);
-    $('#send-progress-percent').textContent = `${percent}%`;
-    $('#send-progress-fill').style.width = `${percent}%`;
-    $('#send-transferred').textContent = `${formatBytes(sentBytes)} / ${formatBytes(totalBytes)}`;
-    
-    const elapsed = (Date.now() - startTime) / 1000;
-    if (elapsed > 0) {
-        const speed = sentBytes / elapsed;
-        $('#send-speed').textContent = `${formatBytes(speed)}/s`;
-        
-        const remaining = totalBytes - sentBytes;
-        const etaSeconds = Math.round(remaining / speed);
-        $('#send-eta').textContent = formatEta(etaSeconds);
-    }
-}
-
-function updateReceiverProgress(receivedBytes, totalBytes) {
-    const percent = Math.round((receivedBytes / totalBytes) * 100);
-    $('#receive-progress-percent').textContent = `${percent}%`;
-    $('#receive-progress-fill').style.width = `${percent}%`;
-    $('#receive-received').textContent = `${formatBytes(receivedBytes)} / ${formatBytes(totalBytes)}`;
-    
-    const elapsed = (Date.now() - startTime) / 1000;
-    if (elapsed > 0) {
-        const speed = receivedBytes / elapsed;
-        $('#receive-speed').textContent = `${formatBytes(speed)}/s`;
-        
-        const remaining = totalBytes - receivedBytes;
-        const etaSeconds = Math.round(remaining / speed);
-        $('#receive-eta').textContent = formatEta(etaSeconds);
-    }
-}
 
 function formatEta(seconds) {
     if (seconds === Infinity || isNaN(seconds)) return '--';

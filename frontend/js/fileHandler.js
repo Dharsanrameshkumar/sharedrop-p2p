@@ -4,19 +4,30 @@
  * Problem: If you try to load a 500MB file into memory all at once,
  * the browser will crash. 
  *
- * Solution: Read the file in small 64KB pieces (chunks) and send 
+ * Solution: Read the file in small 256KB pieces (chunks) and send 
  * each piece through the WebRTC data channel one at a time.
  * On the receiving side, collect all pieces and stitch them back
  * together using the Blob API.
+ *
+ * Speed optimizations for LAN:
+ *   - 256KB chunks (4x larger than typical WebRTC examples)
+ *   - Event-based flow control using bufferedAmountLowThreshold
+ *   - 64MB buffer limit to keep the pipe saturated
  */
 
 'use strict';
 
-const CHUNK_SIZE = 64 * 1024; // 64KB per chunk
+const CHUNK_SIZE = 256 * 1024; // 256KB per chunk (optimized for LAN speed)
+const BUFFER_HIGH = 64 * 1024 * 1024; // 64MB — pause sending when buffer exceeds this
+const BUFFER_LOW  = 16 * 1024 * 1024; // 16MB — resume sending when buffer drops below this
 
 /**
- * FileSender — reads a file in 64KB chunks and sends each chunk
+ * FileSender — reads a file in 256KB chunks and sends each chunk
  * through the WebRTC data channel.
+ * 
+ * Uses event-based flow control: when the outgoing buffer gets full,
+ * we pause and wait for the 'bufferedamountlow' event instead of
+ * polling with setTimeout (much faster).
  */
 class FileSender {
     constructor(file, dataChannel, onProgress, onComplete) {
@@ -25,7 +36,18 @@ class FileSender {
         this.onProgress = onProgress;
         this.onComplete = onComplete;
         this.offset = 0;
+        this.paused = false;
         this.fileReader = new FileReader();
+
+        // Set up event-based flow control
+        this.dataChannel.bufferedAmountLowThreshold = BUFFER_LOW;
+        this._onBufferLow = () => {
+            if (this.paused) {
+                this.paused = false;
+                this.readSlice();
+            }
+        };
+        this.dataChannel.addEventListener('bufferedamountlow', this._onBufferLow);
 
         // When a chunk is done being read from disk, send it
         this.fileReader.onload = (e) => {
@@ -38,18 +60,22 @@ class FileSender {
                 }
 
                 if (this.offset < this.file.size) {
-                    this.readSlice(); // Read the next chunk
+                    // Check if buffer is getting full
+                    if (this.dataChannel.bufferedAmount > BUFFER_HIGH) {
+                        this.paused = true; // Wait for 'bufferedamountlow' event
+                    } else {
+                        this.readSlice(); // Continue immediately
+                    }
                 } else {
+                    this.cleanup();
                     if (this.onComplete) this.onComplete();
                 }
             } catch (err) {
                 console.error("Error sending chunk:", err);
-                // If the buffer overflowed, wait a bit and retry
+                // If the buffer overflowed, wait and retry
                 if (err.name === 'OperationError') {
-                    setTimeout(() => {
-                        this.offset -= e.target.result.byteLength;
-                        this.readSlice();
-                    }, 100);
+                    this.paused = true;
+                    this.offset -= e.target.result.byteLength;
                 }
             }
         };
@@ -59,19 +85,17 @@ class FileSender {
 
     start() {
         this.offset = 0;
+        this.paused = false;
         this.readSlice();
     }
 
     readSlice() {
-        // Flow Control: if the network buffer is getting full, wait before
-        // reading more data. This prevents the browser from running out of memory.
-        if (this.dataChannel.bufferedAmount > 16 * 1024 * 1024) {
-            setTimeout(() => this.readSlice(), 50);
-            return;
-        }
-
         const slice = this.file.slice(this.offset, this.offset + CHUNK_SIZE);
         this.fileReader.readAsArrayBuffer(slice);
+    }
+
+    cleanup() {
+        this.dataChannel.removeEventListener('bufferedamountlow', this._onBufferLow);
     }
 }
 
