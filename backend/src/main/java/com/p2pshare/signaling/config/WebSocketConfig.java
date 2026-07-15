@@ -2,6 +2,7 @@ package com.p2pshare.signaling.config;
 
 import com.p2pshare.signaling.handler.SignalingHandler;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.lang.NonNull;
 import org.springframework.web.socket.config.annotation.EnableWebSocket;
 import org.springframework.web.socket.config.annotation.WebSocketConfigurer;
 import org.springframework.web.socket.config.annotation.WebSocketHandlerRegistry;
@@ -19,14 +20,15 @@ import org.springframework.web.socket.config.annotation.WebSocketHandlerRegistry
 @EnableWebSocket
 public class WebSocketConfig implements WebSocketConfigurer {
 
+    @NonNull
     private final SignalingHandler signalingHandler;
 
-    public WebSocketConfig(SignalingHandler signalingHandler) {
+    public WebSocketConfig(@NonNull SignalingHandler signalingHandler) {
         this.signalingHandler = signalingHandler;
     }
 
     @Override
-    public void registerWebSocketHandlers(WebSocketHandlerRegistry registry) {
+    public void registerWebSocketHandlers(@NonNull WebSocketHandlerRegistry registry) {
         registry.addHandler(signalingHandler, "/signal")
                 .setAllowedOrigins("*");
     }
