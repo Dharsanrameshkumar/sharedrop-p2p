@@ -101,9 +101,9 @@ body::before {
     width: 200%;
     height: 200%;
     background:
-        radial-gradient(ellipse at 20% 50%, rgba(0, 212, 255, 0.06) 0%, transparent 50%),
-        radial-gradient(ellipse at 80% 20%, rgba(168, 85, 247, 0.06) 0%, transparent 50%),
-        radial-gradient(ellipse at 50% 80%, rgba(59, 130, 246, 0.04) 0%, transparent 50%);
+        radial-gradient(ellipse at 20% 50%, rgba(6, 182, 212, 0.15) 0%, transparent 50%),
+        radial-gradient(ellipse at 80% 20%, rgba(139, 92, 246, 0.15) 0%, transparent 50%),
+        radial-gradient(ellipse at 50% 80%, rgba(59, 130, 246, 0.12) 0%, transparent 50%);
     animation: bgShift 20s ease-in-out infinite alternate;
     z-index: 0;
     pointer-events: none;
@@ -128,10 +128,11 @@ body::before {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: var(--space-lg) var(--space-2xl);
-    background: rgba(10, 10, 15, 0.6);
+    padding: var(--space-md) var(--space-2xl);
+    background: rgba(255, 255, 255, 0.95);
     backdrop-filter: blur(20px);
     border-bottom: 1px solid var(--border-subtle);
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
     position: sticky;
     top: 0;
     z-index: 100;
@@ -143,28 +144,34 @@ body::before {
     gap: var(--space-sm);
     cursor: pointer;
     text-decoration: none;
+    transition: transform var(--transition-fast);
+}
+
+.app-logo:hover {
+    transform: scale(1.02);
 }
 
 .logo-icon {
-    width: 36px;
-    height: 36px;
-    border-radius: var(--radius-sm);
+    width: 40px;
+    height: 40px;
+    border-radius: 12px;
     background: var(--gradient-primary);
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 1.1rem;
+    font-size: 1.3rem;
+    color: white;
     box-shadow: var(--shadow-glow-cyan);
 }
 
 .logo-text {
-    font-size: 1.25rem;
-    font-weight: 700;
+    font-size: 1.5rem;
+    font-weight: 800;
     background: var(--gradient-primary);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
-    letter-spacing: -0.02em;
+    letter-spacing: -0.03em;
 }
 
 .header-badge {
