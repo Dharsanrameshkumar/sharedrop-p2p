@@ -736,6 +736,29 @@ window.webrtc.onDataChannelOpen = () => {
     }
 };
 
+// When network check fails — peers are NOT on the same WiFi
+window.webrtc.onNetworkMismatch = () => {
+    showToast('⚠️ Both devices must be on the same WiFi network to transfer files.', 'error', 8000);
+
+    // Reset sender UI
+    const sendStatus = $('#send-connection-status');
+    if (sendStatus.classList.contains('visible')) {
+        sendStatus.className = 'connection-status visible';
+        sendStatus.style.color = 'var(--text-error, #ff4444)';
+        sendStatus.querySelector('.status-text').textContent = 'Not on same WiFi. Connect both devices to the same network.';
+    }
+
+    // Reset receiver UI
+    const receiveStatus = $('#receive-connection-status');
+    if (receiveStatus.classList.contains('visible')) {
+        receiveStatus.className = 'connection-status visible';
+        receiveStatus.style.color = 'var(--text-error, #ff4444)';
+        receiveStatus.querySelector('.status-text').textContent = 'Not on same WiFi. Connect both devices to the same network.';
+        btnJoinRoom.disabled = false;
+        btnJoinRoom.textContent = 'Connect to Sender';
+    }
+};
+
 /**
  * RECEIVER: Handle incoming messages (metadata, file markers).
  */
