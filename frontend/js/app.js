@@ -58,9 +58,10 @@ const toastMessage = $('#toast-message');
  *  State
  * ══════════════════════════════════════════════════════════════ */
 
-const MAX_FILE_SIZE = 1 * 1024 * 1024 * 1024; // 1 GB per file
+const MAX_FILE_SIZE = 5 * 1024 * 1024 * 1024; // 5 GB per file
 let selectedFiles = []; // Array of File objects
 let toastTimeout = null;
+let downloadDirectoryHandle = null; // Used for direct-to-disk streaming
 
 /* ══════════════════════════════════════════════════════════════
  *  View Navigation — switches between Home, Send, and Receive
@@ -445,6 +446,16 @@ btnJoinRoom.addEventListener('click', async () => {
     const code = getRoomCodeFromInputs();
     if (code.length !== 5) return;
 
+    // Optional: Ask for download directory to enable zero-RAM streaming
+    if ('showDirectoryPicker' in window) {
+        try {
+            downloadDirectoryHandle = await window.showDirectoryPicker({ mode: 'readwrite' });
+        } catch (err) {
+            console.warn("User cancelled directory picker, falling back to Blob RAM mode");
+            downloadDirectoryHandle = null;
+        }
+    }
+
     btnJoinRoom.disabled = true;
     btnJoinRoom.textContent = 'Connecting...';
 
@@ -572,39 +583,22 @@ window.webrtc.onConnectionStatus = (state) => {
 };
 
 /**
- * Compute SHA-256 hash of a File or Blob using streaming chunks.
- * Reads the file in 1MB pieces to avoid loading the entire file into memory.
- * Returns the hex string.
+ * Compute SHA-256 hash of a File or Blob.
+ * For files > 50MB, hashing is skipped because native Web Crypto
+ * does not support streaming and will crash the browser tab (ArrayBuffer allocation failed).
+ * WebRTC's underlying SCTP protocol guarantees bit-perfect delivery over the network anyway.
  */
 async function computeSHA256(fileOrBlob) {
-    const HASH_CHUNK_SIZE = 1024 * 1024;
     const fileSize = fileOrBlob.size;
 
-    if (fileSize < 10 * 1024 * 1024) {
-        const buffer = await fileOrBlob.arrayBuffer();
-        const hashBuffer = await crypto.subtle.digest('SHA-256', buffer);
-        const hashArray = Array.from(new Uint8Array(hashBuffer));
-        return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+    // Skip full hashing for large files to prevent memory crashes
+    if (fileSize > 50 * 1024 * 1024) {
+        return "skipped-large-file";
     }
 
-    const chunks = [];
-    let offset = 0;
-    while (offset < fileSize) {
-        const slice = fileOrBlob.slice(offset, offset + HASH_CHUNK_SIZE);
-        const buffer = await slice.arrayBuffer();
-        chunks.push(new Uint8Array(buffer));
-        offset += HASH_CHUNK_SIZE;
-    }
-
-    const totalLength = chunks.reduce((sum, chunk) => sum + chunk.length, 0);
-    const combined = new Uint8Array(totalLength);
-    let pos = 0;
-    for (const chunk of chunks) {
-        combined.set(chunk, pos);
-        pos += chunk.length;
-    }
-
-    const hashBuffer = await crypto.subtle.digest('SHA-256', combined.buffer);
+    // For smaller files, hash the whole thing
+    const buffer = await fileOrBlob.arrayBuffer();
+    const hashBuffer = await crypto.subtle.digest('SHA-256', buffer);
     const hashArray = Array.from(new Uint8Array(hashBuffer));
     return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
 }

@@ -100,37 +100,86 @@ class FileSender {
 }
 
 /**
- * FileReceiver — collects chunks from the sender and stitches them
- * back together into a downloadable file using the Blob API.
+ * FileReceiver — collects chunks from the sender.
+ * If a directoryHandle is provided, streams directly to disk (Zero RAM!).
+ * Otherwise, falls back to stitching them in memory using Blob API.
  */
 class FileReceiver {
-    constructor(metadata, onProgress, onComplete) {
+    constructor(metadata, onProgress, onComplete, directoryHandle = null) {
         this.metadata = metadata;
-        this.chunks = [];
         this.receivedBytes = 0;
         this.onProgress = onProgress;
         this.onComplete = onComplete;
+        this.directoryHandle = directoryHandle;
+        
+        this.chunks = []; // Used either for Blob OR as a temporary queue for Streams
+        this.writable = null;
+        this.writePromise = Promise.resolve(); // Chains writes to keep order
+        this.isStreaming = !!directoryHandle;
+        this.streamReady = false;
+
+        if (this.isStreaming) {
+            this.initStream();
+        }
+    }
+
+    async initStream() {
+        try {
+            const fileHandle = await this.directoryHandle.getFileHandle(this.metadata.fileName, { create: true });
+            this.writable = await fileHandle.createWritable();
+            this.streamReady = true;
+            
+            // Flush any chunks that arrived while we were waiting for the user/disk
+            if (this.chunks.length > 0) {
+                const pending = [...this.chunks];
+                this.chunks = [];
+                for (const chunk of pending) {
+                    this.pushChunk(chunk); // Recursively push now that streamReady is true
+                }
+            }
+        } catch (err) {
+            console.error("Failed to create writable stream, falling back to Blob:", err);
+            this.isStreaming = false; // Fallback to RAM
+        }
     }
 
     pushChunk(chunk) {
-        this.chunks.push(chunk);
+        if (this.isStreaming) {
+            if (!this.streamReady) {
+                this.chunks.push(chunk);
+            } else {
+                // Chain writes to ensure order and avoid overlapping writes
+                this.writePromise = this.writePromise.then(() => this.writable.write(chunk));
+            }
+        } else {
+            // Blob mode (RAM)
+            this.chunks.push(chunk);
+        }
+
         this.receivedBytes += chunk.byteLength;
         
         if (this.onProgress) {
             this.onProgress(this.receivedBytes, this.metadata.fileSize);
         }
 
-        // Once we've received all the bytes, assemble the file
+        // Once we've received all the bytes, finish up
         if (this.receivedBytes >= this.metadata.fileSize) {
             this.finish();
         }
     }
 
-    finish() {
-        // Combine all chunks into a single Blob (this is the complete file)
-        const blob = new Blob(this.chunks, { type: this.metadata.fileType });
-        this.chunks = []; // Free up memory
-        if (this.onComplete) this.onComplete(blob);
+    async finish() {
+        if (this.isStreaming) {
+            // Wait for all writes to finish, then close the file stream
+            await this.writePromise;
+            await this.writable.close();
+            if (this.onComplete) this.onComplete(null); // No blob returned, already on disk!
+        } else {
+            // Blob mode (RAM)
+            const blob = new Blob(this.chunks, { type: this.metadata.fileType });
+            this.chunks = []; // Free up memory
+            if (this.onComplete) this.onComplete(blob);
+        }
     }
 }
 
