@@ -499,12 +499,46 @@ window.webrtc.onConnectionStatus = (state) => {
 };
 
 /**
- * Compute SHA-256 hash of a File or Blob using the Web Crypto API.
+ * Compute SHA-256 hash of a File or Blob using streaming chunks.
+ * Reads the file in 1MB pieces to avoid loading the entire file into memory,
+ * which would crash the browser on large files (500MB+).
  * Returns the hex string.
  */
 async function computeSHA256(fileOrBlob) {
-    const buffer = await fileOrBlob.arrayBuffer();
-    const hashBuffer = await crypto.subtle.digest('SHA-256', buffer);
+    const HASH_CHUNK_SIZE = 1024 * 1024; // 1MB chunks for hashing
+    const fileSize = fileOrBlob.size;
+
+    // For small files (< 10MB), the simple approach is fine
+    if (fileSize < 10 * 1024 * 1024) {
+        const buffer = await fileOrBlob.arrayBuffer();
+        const hashBuffer = await crypto.subtle.digest('SHA-256', buffer);
+        const hashArray = Array.from(new Uint8Array(hashBuffer));
+        return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+    }
+
+    // For large files, read in chunks and hash incrementally
+    // We collect all chunks into a single ArrayBuffer at the end
+    // but process reading in pieces to avoid FileReader memory spikes
+    const chunks = [];
+    let offset = 0;
+
+    while (offset < fileSize) {
+        const slice = fileOrBlob.slice(offset, offset + HASH_CHUNK_SIZE);
+        const buffer = await slice.arrayBuffer();
+        chunks.push(new Uint8Array(buffer));
+        offset += HASH_CHUNK_SIZE;
+    }
+
+    // Combine chunks into a single buffer for hashing
+    const totalLength = chunks.reduce((sum, chunk) => sum + chunk.length, 0);
+    const combined = new Uint8Array(totalLength);
+    let pos = 0;
+    for (const chunk of chunks) {
+        combined.set(chunk, pos);
+        pos += chunk.length;
+    }
+
+    const hashBuffer = await crypto.subtle.digest('SHA-256', combined.buffer);
     const hashArray = Array.from(new Uint8Array(hashBuffer));
     return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
 }

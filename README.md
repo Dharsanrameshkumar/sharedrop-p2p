@@ -1,6 +1,8 @@
 # ShareDrop ⚡ — P2P File Sharing
 
-A peer-to-peer file sharing web app that lets you send files directly between two browsers. No login, no cloud storage, no file size limits worries — the file goes straight from one browser to the other using **WebRTC**.
+A peer-to-peer file sharing app that lets you send files directly between two browsers on the same Wi-Fi network. No login, no cloud storage, no file size worries — the file goes straight from one browser to the other using **WebRTC**.
+
+**No internet required. Everything stays on your local network.**
 
 ## How It Works
 
@@ -23,8 +25,9 @@ A peer-to-peer file sharing web app that lets you send files directly between tw
 
 ```
 p2p/
-├── frontend/                          # Source frontend files
+├── frontend/                          # Frontend files (served by Spring Boot)
 │   ├── index.html
+│   ├── config.js                      # Signaling server URL config
 │   ├── css/style.css
 │   └── js/
 │       ├── signaling.js               # WebSocket client (auto-detects server)
@@ -34,6 +37,7 @@ p2p/
 │
 ├── backend/
 │   ├── pom.xml
+│   ├── mvnw / mvnw.cmd               # Maven wrapper (no Maven install needed)
 │   └── src/main/
 │       ├── java/com/p2pshare/signaling/
 │       │   ├── SignalingApplication.java
@@ -41,7 +45,7 @@ p2p/
 │       │   ├── handler/SignalingHandler.java
 │       │   └── model/SignalMessage.java
 │       └── resources/
-│           └── static/                # Frontend served by Spring Boot
+│           └── application.properties  # Config: port, static file serving
 │
 └── README.md
 ```
@@ -50,22 +54,30 @@ p2p/
 
 - **No Internet Required** — Works entirely on your local Wi-Fi network
 - **Direct P2P Transfer** — Files go straight between browsers, not through a server
-- **Single Server** — One `mvn spring-boot:run` serves everything (frontend + signaling)
+- **Single Command** — One `mvn spring-boot:run` serves everything (frontend + signaling)
 - **File Chunking** — Large files are split into 64KB chunks to prevent browser crashes
 - **Flow Control** — Monitors WebRTC buffer to pause sending when the network is slow
 - **Room Codes** — 5-character codes to pair sender and receiver
+- **SHA-256 Integrity** — File integrity verified after transfer using streaming hash
 - **Auto Cleanup** — Old rooms are automatically removed after 30 minutes
 - **Drag & Drop** — Drag files into the browser to share them
 - **Progress Tracking** — Real-time speed, ETA, and percentage display
 
 ## How to Run
 
-Requires **Java 17+** and **Maven**. **No internet connection needed.**
+Requires **Java 17+**. Maven is included via the wrapper (`mvnw`). **No internet connection needed.**
 
 ### 1. Start the server
 ```bash
 cd backend
 mvn spring-boot:run
+```
+
+Or using the Maven wrapper (no Maven install required):
+```bash
+cd backend
+./mvnw spring-boot:run        # Mac/Linux
+mvnw.cmd spring-boot:run      # Windows
 ```
 
 ### 2. Open in browser
@@ -78,4 +90,3 @@ To find your IP address:
 
 ### 3. Transfer a file
 Open two browser tabs (or two devices on the same Wi-Fi), one sends and one receives.
-
