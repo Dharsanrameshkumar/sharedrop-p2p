@@ -75,7 +75,7 @@ class FileSender {
                     }
 
                     const chunkLength = Math.min(CHUNK_SIZE, blockBuffer.byteLength - blockOffset);
-                    const chunk = new Uint8Array(blockBuffer, blockOffset, chunkLength);
+                    const chunk = blockBuffer.slice(blockOffset, blockOffset + chunkLength);
                     this.dataChannel.send(chunk);
                     
                     blockOffset += chunkLength;
