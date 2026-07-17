@@ -920,7 +920,10 @@ function handleBatchComplete() {
                 const a = document.createElement('a');
                 a.href = url;
                 a.download = f.name;
+                a.style.display = 'none';
+                document.body.appendChild(a);
                 a.click();
+                document.body.removeChild(a);
                 setTimeout(() => URL.revokeObjectURL(url), 5000);
             }, i * 500); // Stagger downloads to avoid browser blocking
         });
