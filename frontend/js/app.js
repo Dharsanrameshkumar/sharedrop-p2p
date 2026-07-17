@@ -63,7 +63,6 @@ const toastMessage = $('#toast-message');
 const MAX_FILE_SIZE = 5 * 1024 * 1024 * 1024; // 5 GB per file
 let selectedFiles = []; // Array of File objects
 let toastTimeout = null;
-let downloadDirectoryHandle = null; // Used for direct-to-disk streaming
 
 /* ══════════════════════════════════════════════════════════════
  *  View Navigation — switches between Home, Send, and Receive
@@ -451,16 +450,6 @@ btnCreateRoom.addEventListener('click', async () => {
 btnJoinRoom.addEventListener('click', async () => {
     const code = getRoomCodeFromInputs();
     if (code.length !== 5) return;
-
-    // Optional: Ask for download directory to enable zero-RAM streaming
-    if ('showDirectoryPicker' in window) {
-        try {
-            downloadDirectoryHandle = await window.showDirectoryPicker({ mode: 'readwrite' });
-        } catch (err) {
-            console.warn("User cancelled directory picker, falling back to Blob RAM mode");
-            downloadDirectoryHandle = null;
-        }
-    }
 
     btnJoinRoom.disabled = true;
     btnJoinRoom.textContent = 'Connecting...';
