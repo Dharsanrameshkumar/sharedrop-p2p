@@ -63,6 +63,7 @@ const toastMessage = $('#toast-message');
 const MAX_FILE_SIZE = 5 * 1024 * 1024 * 1024; // 5 GB per file
 let selectedFiles = []; // Array of File objects
 let toastTimeout = null;
+let transferSuccessful = false;
 
 /* ══════════════════════════════════════════════════════════════
  *  View Navigation — switches between Home, Send, and Receive
@@ -602,6 +603,7 @@ async function computeSHA256(fileOrBlob) {
  * SENDER: Start sending all selected files sequentially.
  */
 async function startBatchSend() {
+    transferSuccessful = false;
     sendFileIndex = 0;
     totalBytesSent = 0;
     totalBytesAllFiles = selectedFiles.reduce((sum, f) => sum + f.size, 0);
@@ -643,12 +645,17 @@ async function startBatchSend() {
 async function sendNextFile() {
     if (sendFileIndex >= selectedFiles.length) {
         // All files sent!
+        transferSuccessful = true;
         window.webrtc.sendMetadata({ type: 'batch-complete' });
         $('#send-transfer').classList.remove('visible');
         $('#send-complete').classList.add('visible');
         $('#send-complete-subtitle').textContent = 
             `${selectedFiles.length} file${selectedFiles.length !== 1 ? 's' : ''} successfully delivered.`;
-        window.webrtc.close();
+        
+        // Delay closing WebRTC to give final data channel packets time to flush
+        setTimeout(() => {
+            window.webrtc.close();
+        }, 1000);
         return;
     }
 
@@ -775,6 +782,7 @@ window.webrtc.onMessage = (msgString) => {
  * RECEIVER: Batch of files is starting.
  */
 function handleBatchStart(msg) {
+    transferSuccessful = false;
     batchMetadata = msg;
     receivedFiles = [];
     receiveFileIndex = 0;
@@ -890,6 +898,7 @@ function handleFileStart(msg) {
  * RECEIVER: All files have been received.
  */
 function handleBatchComplete() {
+    transferSuccessful = true;
     $('#receive-transfer').classList.remove('visible');
     $('#receive-complete').classList.add('visible');
     
@@ -982,7 +991,7 @@ window.webrtc.onDataChannelClose = () => {
     console.log("Data channel closed");
     const sendVisible = $('#send-transfer').classList.contains('visible');
     const receiveVisible = $('#receive-transfer').classList.contains('visible');
-    if (sendVisible || receiveVisible) {
+    if ((sendVisible || receiveVisible) && !transferSuccessful) {
         cancelTransfer(false);
     }
 };
