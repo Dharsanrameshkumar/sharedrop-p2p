@@ -42,8 +42,10 @@ const roomCodeValue = $('#room-code-value');
 const btnCopyCode = $('#btn-copy-code');
 const sendSteps = $('#send-steps');
 const btnSendAnother = $('#btn-send-another');
+const btnCancelSend = $('#btn-cancel-send');
 
 // Receive View
+const btnCancelReceive = $('#btn-cancel-receive');
 const btnBackReceive = $('#btn-back-receive');
 const roomCodeInputs = $$('#room-code-inputs input');
 const btnJoinRoom = $('#btn-join-room');
@@ -99,6 +101,10 @@ btnReceiveAnother.addEventListener('click', () => {
     resetReceiveView();
     showView('view-receive');
 });
+
+// Cancel transfer buttons
+btnCancelSend.addEventListener('click', () => cancelTransfer(true));
+btnCancelReceive.addEventListener('click', () => cancelTransfer(true));
 
 // Keyboard support for the action cards
 btnGoSend.addEventListener('keydown', (e) => {
@@ -686,30 +692,39 @@ async function sendNextFile() {
     $('#send-progress-fill').style.width = '0%';
 
     // Start sending chunks
+    let lastProgressUpdate = 0;
     fileSender = new window.fileHandler.FileSender(
         file,
         window.webrtc.dataChannel,
         (sentBytes, totalBytes) => {
-            // Per-file progress
-            const percent = Math.round((sentBytes / totalBytes) * 100);
-            $('#send-progress-percent').textContent = `${percent}%`;
-            $('#send-progress-fill').style.width = `${percent}%`;
+            const now = Date.now();
+            const isComplete = sentBytes === totalBytes;
 
-            // Overall progress
-            const overallSent = totalBytesSent + sentBytes;
-            const overallPercent = Math.round((overallSent / totalBytesAllFiles) * 100);
-            $('#send-overall-percent').textContent = `${overallPercent}%`;
-            $('#send-overall-fill').style.width = `${overallPercent}%`;
+            // Only update DOM every 150ms or when complete to prevent rendering bottlenecks
+            if (now - lastProgressUpdate > 150 || isComplete) {
+                lastProgressUpdate = now;
 
-            // Stats
-            const elapsed = (Date.now() - startTime) / 1000;
-            if (elapsed > 0) {
-                const speed = overallSent / elapsed;
-                $('#send-speed').textContent = `${formatBytes(speed)}/s`;
-                $('#send-transferred').textContent = `${formatBytes(overallSent)} / ${formatBytes(totalBytesAllFiles)}`;
-                const remaining = totalBytesAllFiles - overallSent;
-                const etaSeconds = Math.round(remaining / speed);
-                $('#send-eta').textContent = formatEta(etaSeconds);
+                // Per-file progress
+                const percent = Math.round((sentBytes / totalBytes) * 100);
+                $('#send-progress-percent').textContent = `${percent}%`;
+                $('#send-progress-fill').style.width = `${percent}%`;
+
+                // Overall progress
+                const overallSent = totalBytesSent + sentBytes;
+                const overallPercent = Math.round((overallSent / totalBytesAllFiles) * 100);
+                $('#send-overall-percent').textContent = `${overallPercent}%`;
+                $('#send-overall-fill').style.width = `${overallPercent}%`;
+
+                // Stats
+                const elapsed = (Date.now() - startTime) / 1000;
+                if (elapsed > 0) {
+                    const speed = overallSent / elapsed;
+                    $('#send-speed').textContent = `${formatBytes(speed)}/s`;
+                    $('#send-transferred').textContent = `${formatBytes(overallSent)} / ${formatBytes(totalBytesAllFiles)}`;
+                    const remaining = totalBytesAllFiles - overallSent;
+                    const etaSeconds = Math.round(remaining / speed);
+                    $('#send-eta').textContent = formatEta(etaSeconds);
+                }
             }
         },
         () => {
@@ -755,6 +770,9 @@ window.webrtc.onMessage = (msgString) => {
                 break;
             case 'batch-complete':
                 handleBatchComplete();
+                break;
+            case 'transfer-cancelled':
+                cancelTransfer(false);
                 break;
             default:
                 console.warn('Unknown message type:', msg.type);
@@ -833,29 +851,38 @@ function handleFileStart(msg) {
     if (statusEl) statusEl.textContent = '⬇️';
 
     // Create receiver for this file
+    let lastReceiveProgressUpdate = 0;
     fileReceiver = new window.fileHandler.FileReceiver(
         msg,
         (receivedBytes, fileTotal) => {
-            // Per-file progress
-            const percent = Math.round((receivedBytes / fileTotal) * 100);
-            $('#receive-progress-percent').textContent = `${percent}%`;
-            $('#receive-progress-fill').style.width = `${percent}%`;
+            const now = Date.now();
+            const isComplete = receivedBytes === fileTotal;
 
-            // Overall progress
-            const overallReceived = totalBytesReceived + receivedBytes;
-            const overallPercent = Math.round((overallReceived / totalBytesExpected) * 100);
-            $('#receive-overall-percent').textContent = `${overallPercent}%`;
-            $('#receive-overall-fill').style.width = `${overallPercent}%`;
+            // Only update DOM every 150ms or when complete to prevent rendering bottlenecks
+            if (now - lastReceiveProgressUpdate > 150 || isComplete) {
+                lastReceiveProgressUpdate = now;
 
-            // Stats
-            const elapsed = (Date.now() - startTime) / 1000;
-            if (elapsed > 0) {
-                const speed = overallReceived / elapsed;
-                $('#receive-speed').textContent = `${formatBytes(speed)}/s`;
-                $('#receive-received').textContent = `${formatBytes(overallReceived)} / ${formatBytes(totalBytesExpected)}`;
-                const remaining = totalBytesExpected - overallReceived;
-                const etaSeconds = Math.round(remaining / speed);
-                $('#receive-eta').textContent = formatEta(etaSeconds);
+                // Per-file progress
+                const percent = Math.round((receivedBytes / fileTotal) * 100);
+                $('#receive-progress-percent').textContent = `${percent}%`;
+                $('#receive-progress-fill').style.width = `${percent}%`;
+
+                // Overall progress
+                const overallReceived = totalBytesReceived + receivedBytes;
+                const overallPercent = Math.round((overallReceived / totalBytesExpected) * 100);
+                $('#receive-overall-percent').textContent = `${overallPercent}%`;
+                $('#receive-overall-fill').style.width = `${overallPercent}%`;
+
+                // Stats
+                const elapsed = (Date.now() - startTime) / 1000;
+                if (elapsed > 0) {
+                    const speed = overallReceived / elapsed;
+                    $('#receive-speed').textContent = `${formatBytes(speed)}/s`;
+                    $('#receive-received').textContent = `${formatBytes(overallReceived)} / ${formatBytes(totalBytesExpected)}`;
+                    const remaining = totalBytesExpected - overallReceived;
+                    const etaSeconds = Math.round(remaining / speed);
+                    $('#receive-eta').textContent = formatEta(etaSeconds);
+                }
             }
         },
         (blob) => {
@@ -964,7 +991,41 @@ window.webrtc.onBinaryMessage = (arrayBuffer) => {
 
 window.webrtc.onDataChannelClose = () => {
     console.log("Data channel closed");
+    const sendVisible = $('#send-transfer').classList.contains('visible');
+    const receiveVisible = $('#receive-transfer').classList.contains('visible');
+    if (sendVisible || receiveVisible) {
+        cancelTransfer(false);
+    }
 };
+
+function cancelTransfer(isLocalAction) {
+    if (isLocalAction) {
+        try {
+            window.webrtc.sendMetadata({ type: 'transfer-cancelled' });
+        } catch (e) {
+            console.warn("Failed to send cancel message, connection might be closed already.");
+        }
+        showToast('Transfer cancelled.', 'info');
+    } else {
+        showToast('Transfer was cancelled by the peer.', 'error');
+    }
+
+    if (fileSender) {
+        fileSender.cancel();
+        fileSender = null;
+    }
+    if (fileReceiver) {
+        fileReceiver.cancel();
+        fileReceiver = null;
+    }
+
+    window.webrtc.close();
+    window.signaling.disconnect();
+
+    resetSendView();
+    resetReceiveView();
+    showView('view-home');
+}
 
 /* ══════════════════════════════════════════════════════════════
  *  Progress Tracking — speed, ETA, percentage

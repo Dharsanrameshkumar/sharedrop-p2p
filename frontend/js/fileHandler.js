@@ -17,7 +17,10 @@
 
 'use strict';
 
-const CHUNK_SIZE = 256 * 1024; // 256KB per chunk (optimized for LAN speed)
+const CHUNK_SIZE = 64 * 1024; // 64KB per chunk (optimal for WebRTC SCTP)
+const BUFFER_THRESHOLD = 1024 * 1024; // 1MB buffer threshold to keep pipeline saturated
+const READ_BLOCK_SIZE = 2 * 1024 * 1024; // Read 2MB blocks from file to minimize async I/O
+const WRITE_BUFFER_SIZE = 1024 * 1024; // Buffer 1MB before writing to disk
 
 /**
  * FileSender — reads a file in chunks and sends each chunk
@@ -33,15 +36,15 @@ class FileSender {
         this.onComplete = onComplete;
         this.offset = 0;
         this.paused = false;
+        this.cancelled = false;
 
-        // Set up event-based flow control
-        // Default to a safe low threshold (e.g. 64KB) as suggested
-        this.dataChannel.bufferedAmountLowThreshold = 65536; 
+        // Set low threshold to 1MB to keep pipeline full
+        this.dataChannel.bufferedAmountLowThreshold = BUFFER_THRESHOLD; 
         
         this._onBufferLow = () => {
-            if (this.paused) {
+            if (this.paused && !this.cancelled) {
                 this.paused = false;
-                this._sendNextChunk(); // Resume sending
+                this._sendLoop(); // Resume sending
             }
         };
         this.dataChannel.addEventListener('bufferedamountlow', this._onBufferLow);
@@ -50,48 +53,55 @@ class FileSender {
     start() {
         this.offset = 0;
         this.paused = false;
-        this._sendNextChunk();
+        this.cancelled = false;
+        this._sendLoop();
     }
 
-    async _sendNextChunk() {
-        if (this.offset >= this.file.size) {
-            this.cleanup();
-            if (this.onComplete) this.onComplete();
-            return;
-        }
-
+    async _sendLoop() {
         try {
-            // Check if buffer is getting full before sending
-            // Wait for bufferedamountlow event to resume
-            if (this.dataChannel.bufferedAmount > this.dataChannel.bufferedAmountLowThreshold) {
-                this.paused = true;
-                return;
+            while (this.offset < this.file.size && !this.cancelled) {
+                // Read a larger block from the file to reduce async I/O overhead
+                const slice = this.file.slice(this.offset, this.offset + READ_BLOCK_SIZE);
+                const blockBuffer = await slice.arrayBuffer();
+                
+                if (this.cancelled) return;
+
+                let blockOffset = 0;
+                // Send the block in 64KB chunks synchronously to maximize WebRTC throughput
+                while (blockOffset < blockBuffer.byteLength && !this.cancelled) {
+                    if (this.dataChannel.bufferedAmount > this.dataChannel.bufferedAmountLowThreshold) {
+                        this.paused = true;
+                        return; // Pause and wait for bufferedamountlow
+                    }
+
+                    const chunkLength = Math.min(CHUNK_SIZE, blockBuffer.byteLength - blockOffset);
+                    const chunk = new Uint8Array(blockBuffer, blockOffset, chunkLength);
+                    this.dataChannel.send(chunk);
+                    
+                    blockOffset += chunkLength;
+                    this.offset += chunkLength;
+
+                    if (this.onProgress) {
+                        this.onProgress(this.offset, this.file.size);
+                    }
+                }
             }
 
-            const slice = this.file.slice(this.offset, this.offset + CHUNK_SIZE);
-            const buffer = await slice.arrayBuffer(); // Clean async read instead of FileReader
-            
-            this.dataChannel.send(buffer);
-            this.offset += buffer.byteLength;
-
-            if (this.onProgress) {
-                this.onProgress(this.offset, this.file.size);
-            }
-
-            // Continue sending next chunk if not paused
-            if (!this.paused) {
-                // Stack won't overflow because of await arrayBuffer(), but we can still use setTimeout for good measure
-                setTimeout(() => this._sendNextChunk(), 0);
+            // Finished loop and all data sent
+            if (this.offset >= this.file.size && !this.cancelled) {
+                this.cleanup();
+                if (this.onComplete) this.onComplete();
             }
 
         } catch (err) {
-            if (err.name === 'OperationError') {
-                this.paused = true;
-                console.warn("Buffer full, waiting for bufferedamountlow event...");
-            } else {
-                console.error("Send error:", err);
-            }
+            console.error("Send loop error:", err);
         }
+    }
+
+    cancel() {
+        this.cancelled = true;
+        this.paused = true;
+        this.cleanup();
     }
 
     cleanup() {
@@ -144,22 +154,21 @@ class FileReceiver {
     }
 
     pushChunk(chunk) {
-        if (this.isStreaming) {
-            if (!this.streamReady) {
-                this.chunks.push(chunk);
-            } else {
-                // Chain writes to ensure order and avoid overlapping writes
-                this.writePromise = this.writePromise.then(() => this.writable.write(chunk));
-            }
-        } else {
-            // Blob mode (RAM)
-            this.chunks.push(chunk);
-        }
-
+        this.chunks.push(chunk);
         this.receivedBytes += chunk.byteLength;
         
         if (this.onProgress) {
             this.onProgress(this.receivedBytes, this.metadata.fileSize);
+        }
+
+        // If streaming to disk, buffer writes in 1MB chunks to prevent I/O bottlenecks
+        if (this.isStreaming && this.streamReady) {
+            const bufferedSize = this.chunks.reduce((sum, c) => sum + c.byteLength, 0);
+            if (bufferedSize >= WRITE_BUFFER_SIZE) {
+                const blobToWrite = new Blob(this.chunks);
+                this.chunks = [];
+                this.writePromise = this.writePromise.then(() => this.writable.write(blobToWrite));
+            }
         }
 
         // Once we've received all the bytes, finish up
@@ -170,6 +179,12 @@ class FileReceiver {
 
     async finish() {
         if (this.isStreaming) {
+            // Write any remaining buffered chunks
+            if (this.chunks.length > 0) {
+                const blobToWrite = new Blob(this.chunks);
+                this.chunks = [];
+                this.writePromise = this.writePromise.then(() => this.writable.write(blobToWrite));
+            }
             // Wait for all writes to finish, then close the file stream
             await this.writePromise;
             await this.writable.close();
@@ -179,6 +194,18 @@ class FileReceiver {
             const blob = new Blob(this.chunks, { type: this.metadata.fileType });
             this.chunks = []; // Free up memory
             if (this.onComplete) this.onComplete(blob);
+        }
+    }
+
+    async cancel() {
+        this.chunks = []; // Free up memory
+        if (this.isStreaming && this.writable) {
+            try {
+                await this.writePromise;
+                await this.writable.abort();
+            } catch (err) {
+                console.error("Error aborting writable stream:", err);
+            }
         }
     }
 }

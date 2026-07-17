@@ -12,6 +12,8 @@ import org.springframework.web.socket.TextMessage;
 import org.springframework.web.socket.WebSocketSession;
 import org.springframework.web.socket.handler.TextWebSocketHandler;
 
+import com.p2pshare.signaling.service.RateLimiterService;
+
 import java.io.IOException;
 import java.security.SecureRandom;
 import java.time.Duration;
@@ -51,6 +53,31 @@ public class SignalingHandler extends TextWebSocketHandler {
 
     // Session ID -> Room code (so we can clean up when someone disconnects)
     private final Map<String, String> sessionToRoom = new ConcurrentHashMap<>();
+
+    private final RateLimiterService rateLimiterService;
+
+    public SignalingHandler(RateLimiterService rateLimiterService) {
+        this.rateLimiterService = rateLimiterService;
+    }
+
+    /**
+     * Get the count of currently active rooms.
+     */
+    public int getActiveRoomsCount() {
+        return rooms.size();
+    }
+
+    /**
+     * Get the status of a specific room code.
+     * Returns: "WAITING_FOR_PEER", "FULL", or "NOT_FOUND".
+     */
+    public String getRoomStatus(String roomCode) {
+        if (roomCode == null) return "NOT_FOUND";
+        Room room = rooms.get(roomCode.trim().toLowerCase());
+        if (room == null) return "NOT_FOUND";
+        if (room.receiver == null) return "WAITING_FOR_PEER";
+        return "FULL";
+    }
 
     /* ═══════════════════════════════════════════════════════════
      *  WebSocket Lifecycle Methods
@@ -120,6 +147,16 @@ public class SignalingHandler extends TextWebSocketHandler {
     private void handleCreateRoom(WebSocketSession session) {
         if (sessionToRoom.containsKey(session.getId())) {
             sendMessage(session, SignalMessage.error("You are already in a room."));
+            return;
+        }
+
+        // Apply rate limit check: Max 5 rooms per IP per hour
+        String ip = "unknown";
+        if (session.getRemoteAddress() != null) {
+            ip = session.getRemoteAddress().getAddress().getHostAddress();
+        }
+        if (!rateLimiterService.isAllowed(ip, "create-room", 5.0, 5.0 / 3600.0)) {
+            sendMessage(session, SignalMessage.error("Rate limit exceeded. You can only create 5 rooms per hour."));
             return;
         }
 
@@ -278,6 +315,7 @@ public class SignalingHandler extends TextWebSocketHandler {
                 // Remove session mappings
                 if (room.sender != null) sessionToRoom.remove(room.sender.getId());
                 if (room.receiver != null) sessionToRoom.remove(room.receiver.getId());
+
                 log.info("Expired room {} cleaned up", entry.getKey());
                 return true;
             }
