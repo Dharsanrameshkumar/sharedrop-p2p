@@ -80,11 +80,13 @@ function showView(viewId) {
 // Navigation button clicks
 btnGoSend.addEventListener('click', () => showView('view-send'));
 btnGoReceive.addEventListener('click', () => showView('view-receive'));
-logoHomeLink.addEventListener('click', () => {
-    resetSendView();
-    resetReceiveView();
-    showView('view-home');
-});
+if (logoHomeLink) {
+    logoHomeLink.addEventListener('click', () => {
+        resetSendView();
+        resetReceiveView();
+        showView('view-home');
+    });
+}
 btnBackSend.addEventListener('click', () => {
     resetSendView();
     showView('view-home');
@@ -164,11 +166,7 @@ function addFiles(newFiles) {
     let rejected = 0;
 
     for (const file of newFiles) {
-        if (file.size > MAX_FILE_SIZE) {
-            showToast(`"${file.name}" is too large (${formatBytes(file.size)}). Max 1 GB per file.`, 'error');
-            rejected++;
-            continue;
-        }
+
         if (file.size === 0) {
             showToast(`"${file.name}" is empty.`, 'error');
             rejected++;
@@ -223,7 +221,7 @@ function updateFileListUI() {
             <span class="fl-icon">${getFileIcon(file.type, file.name)}</span>
             <span class="fl-name" title="${file.name}">${file.name}</span>
             <span class="fl-size">${formatBytes(file.size)}</span>
-            <button class="fl-remove" title="Remove" data-index="${index}">✕</button>
+            <button class="fl-remove" title="Remove" data-index="${index}"><svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></button>
         `;
         fileListEl.appendChild(item);
     });
@@ -314,11 +312,11 @@ btnCopyCode.addEventListener('click', async () => {
     try {
         await navigator.clipboard.writeText(code);
         btnCopyCode.classList.add('copied');
-        btnCopyCode.textContent = '✓';
+        btnCopyCode.innerHTML = '<svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>';
         showToast('Code copied to clipboard!', 'success');
         setTimeout(() => {
             btnCopyCode.classList.remove('copied');
-            btnCopyCode.textContent = '📋';
+            btnCopyCode.innerHTML = '<svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>';
         }, 2000);
     } catch {
         showToast('Failed to copy code', 'error');
@@ -413,17 +411,19 @@ function formatBytes(bytes) {
 }
 
 function getFileIcon(mimeType, name) {
-    if (!mimeType) return '📄';
-    if (mimeType.startsWith('image/')) return '🖼️';
-    if (mimeType.startsWith('video/')) return '🎬';
-    if (mimeType.startsWith('audio/')) return '🎵';
-    if (mimeType.includes('pdf')) return '📕';
-    if (mimeType.includes('zip') || mimeType.includes('rar') || mimeType.includes('7z') || mimeType.includes('tar')) return '🗜️';
-    if (mimeType.includes('text') || mimeType.includes('json') || mimeType.includes('xml')) return '📝';
-    if (mimeType.includes('spreadsheet') || mimeType.includes('excel') || name?.endsWith('.csv')) return '📊';
-    if (mimeType.includes('presentation') || mimeType.includes('powerpoint')) return '📊';
-    if (mimeType.includes('document') || mimeType.includes('word')) return '📘';
-    return '📄';
+    const iconSvg = (path) => `<svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">${path}</svg>`;
+    
+    if (!mimeType) return iconSvg('<path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path><polyline points="13 2 13 9 20 9"></polyline>');
+    if (mimeType.startsWith('image/')) return iconSvg('<rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline>');
+    if (mimeType.startsWith('video/')) return iconSvg('<polygon points="23 7 16 12 23 17 23 7"></polygon><rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect>');
+    if (mimeType.startsWith('audio/')) return iconSvg('<path d="M9 18V5l12-2v13"></path><circle cx="6" cy="18" r="3"></circle><circle cx="18" cy="16" r="3"></circle>');
+    if (mimeType.includes('pdf')) return iconSvg('<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline>');
+    if (mimeType.includes('zip') || mimeType.includes('rar') || mimeType.includes('7z') || mimeType.includes('tar')) return iconSvg('<path d="M21 8v13H3V8"></path><polyline points="1 3 23 3 23 8 1 8 1 3"></polyline><line x1="10" y1="12" x2="14" y2="12"></line>');
+    if (mimeType.includes('text') || mimeType.includes('json') || mimeType.includes('xml')) return iconSvg('<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline>');
+    if (mimeType.includes('spreadsheet') || mimeType.includes('excel') || name?.endsWith('.csv')) return iconSvg('<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><path d="M8 13h2v4H8zM14 13h2v4h-2zM11 13h2v4h-2z"></path>');
+    if (mimeType.includes('presentation') || mimeType.includes('powerpoint')) return iconSvg('<rect x="3" y="3" width="18" height="14" rx="2" ry="2"></rect><line x1="8" y1="21" x2="16" y2="21"></line><line x1="12" y1="17" x2="12" y2="21"></line>');
+    if (mimeType.includes('document') || mimeType.includes('word')) return iconSvg('<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline>');
+    return iconSvg('<path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path><polyline points="13 2 13 9 20 9"></polyline>');
 }
 
 /* ══════════════════════════════════════════════════════════════
@@ -551,7 +551,7 @@ window.signaling.onReconnected = () => {
  *  Startup
  * ══════════════════════════════════════════════════════════════ */
 
-console.log('⚡ ShareDrop - P2P File Sharing');
+console.log('ShareDrop - P2P File Sharing');
 
 /* ══════════════════════════════════════════════════════════════
  *  WebRTC & File Transfer — Multi-file send/receive
@@ -889,7 +889,7 @@ function handleFileStart(msg) {
 
             // Update status icon
             const statusEl = $(`#ifi-status-${receiveFileIndex}`);
-            if (statusEl) statusEl.textContent = '✅';
+            if (statusEl) statusEl.innerHTML = '<svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>';
         }
     );
 }
@@ -912,7 +912,7 @@ function handleBatchComplete() {
     verifyAllFiles();
 
     // Set up "Download All" button
-    btnDownloadAll.textContent = `💾 Download ${count > 1 ? 'All ' + count + ' Files' : 'File'}`;
+    btnDownloadAll.innerHTML = `<svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg> Download ${count > 1 ? 'All ' + count + ' Files' : 'File'}`;
     btnDownloadAll.onclick = () => {
         receivedFiles.forEach((f, i) => {
             setTimeout(() => {
@@ -973,11 +973,11 @@ async function verifyAllFiles() {
 
     if (failed === 0) {
         badge.className = 'integrity-badge verified';
-        icon.textContent = '✅';
+        icon.innerHTML = '<svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>';
         text.textContent = `All ${verified} file${verified !== 1 ? 's' : ''} verified (SHA-256)`;
     } else {
         badge.className = 'integrity-badge corrupted';
-        icon.textContent = '❌';
+        icon.innerHTML = '<svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>';
         text.textContent = `${failed} file${failed !== 1 ? 's' : ''} failed integrity check`;
         showToast('Warning: Some files may be corrupted!', 'error', 6000);
     }

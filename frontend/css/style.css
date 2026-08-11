@@ -4,41 +4,41 @@
    ═══════════════════════════════════════════════════════════ */
 
 :root {
-    /* Colors */
-    --bg-primary: #f8fafc;
-    --bg-secondary: #f1f5f9;
-    --bg-tertiary: #e2e8f0;
-    --bg-card: #ffffff;
-    --bg-card-hover: #f8fafc;
+    /* Colors - Minimalist Black & White (Light Mode) */
+    --bg-primary: #FFFFFF;
+    --bg-secondary: #FAFAFA;
+    --bg-tertiary: #F4F4F5;
+    --bg-card: #FFFFFF;
+    --bg-card-hover: #FAFAFA;
     --bg-glass: rgba(255, 255, 255, 0.9);
     --bg-glass-hover: rgba(255, 255, 255, 1);
 
-    --text-primary: #0f172a;
-    --text-secondary: #475569;
-    --text-muted: #64748b;
+    --text-primary: #000000;
+    --text-secondary: #52525B;
+    --text-muted: #A1A1AA;
 
-    --accent-cyan: #2563eb;
-    --accent-purple: #4f46e5;
-    --accent-blue: #3b82f6;
-    --accent-green: #16a34a;
-    --accent-red: #dc2626;
-    --accent-orange: #d97706;
+    --accent-cyan: #000000;
+    --accent-purple: #111111;
+    --accent-blue: #000000;
+    --accent-green: #000000;
+    --accent-red: #000000;
+    --accent-orange: #000000;
 
-    --gradient-primary: linear-gradient(135deg, #2563eb, #4f46e5);
-    --gradient-secondary: linear-gradient(135deg, #1e40af, #3b82f6);
-    --gradient-success: linear-gradient(135deg, #16a34a, #22c55e);
-    --gradient-danger: linear-gradient(135deg, #dc2626, #ef4444);
+    --gradient-primary: #000000;
+    --gradient-secondary: #111111;
+    --gradient-success: #000000;
+    --gradient-danger: #000000;
 
-    --border-subtle: #e2e8f0;
-    --border-accent: #cbd5e1;
+    --border-subtle: transparent; /* No visible lines */
+    --border-accent: #000000;
 
-    --shadow-glow-cyan: 0 4px 12px rgba(37, 99, 235, 0.08);
-    --shadow-glow-purple: 0 4px 12px rgba(79, 70, 229, 0.08);
-    --shadow-card: 0 10px 15px -3px rgba(0, 0, 0, 0.05), 0 4px 6px -2px rgba(0, 0, 0, 0.02);
+    --shadow-glow-cyan: none;
+    --shadow-glow-purple: none;
+    --shadow-card: none;
 
     /* Typography */
-    --font-primary: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-    --font-mono: 'Cascadia Code', 'JetBrains Mono', 'Fira Code', 'Consolas', 'Courier New', monospace;
+    --font-primary: 'Jost', 'Inter', -apple-system, sans-serif;
+    --font-mono: 'Cascadia Code', 'JetBrains Mono', monospace;
 
     /* Spacing */
     --space-xs: 0.25rem;
@@ -49,11 +49,11 @@
     --space-2xl: 3rem;
     --space-3xl: 4rem;
 
-    /* Border radius */
-    --radius-sm: 6px;
-    --radius-md: 8px;
-    --radius-lg: 12px;
-    --radius-xl: 16px;
+    /* Border radius - Sharp/Minimalist */
+    --radius-sm: 0px;
+    --radius-md: 0px;
+    --radius-lg: 0px;
+    --radius-xl: 0px;
     --radius-full: 9999px;
 
     /* Transitions */
@@ -136,7 +136,7 @@ body {
     align-items: center;
     justify-content: center;
     font-size: 1.1rem;
-    color: white;
+    color: var(--bg-primary);
 }
 
 .logo-text {
@@ -209,13 +209,12 @@ body {
     width: 64px;
     height: 64px;
     margin: 0 auto var(--space-xl);
-    border-radius: var(--radius-lg);
-    background: var(--gradient-primary);
+    background: transparent;
     display: flex;
     align-items: center;
     justify-content: center;
     font-size: 1.8rem;
-    color: white;
+    color: var(--text-primary);
 }
 
 .home-hero h1 {
@@ -906,18 +905,25 @@ body {
 .room-code-input-group input {
     width: 52px;
     height: 64px;
+    line-height: 64px;
     text-align: center;
     font-family: var(--font-mono);
     font-size: 1.5rem;
     font-weight: 600;
     text-transform: uppercase;
-    background: var(--bg-card);
-    border: 2px solid var(--border-subtle);
-    border-radius: var(--radius-md);
-    color: var(--text-primary);
+    color: #000000 !important;
+    -webkit-text-fill-color: #000000 !important;
+    background: #FFFFFF !important;
+    border: 2px solid #000000;
+    border-radius: 4px;
+    padding: 0;
+    cursor: text;
     outline: none;
-    transition: all var(--transition-fast);
-    caret-color: var(--accent-cyan);
+    transition: all var(--transition-base);
+    caret-color: #000000;
+    appearance: none;
+    -webkit-appearance: none;
+    opacity: 1;
 }
 
 .room-code-input-group input:focus {
@@ -949,9 +955,9 @@ body {
 }
 
 .btn-primary {
-    background: var(--gradient-primary);
-    color: white;
-    box-shadow: 0 4px 12px rgba(37, 99, 235, 0.15);
+    background: #000000;
+    color: #FFFFFF;
+    box-shadow: 0 4px 12px rgba(255, 255, 255, 0.15);
 }
 
 .btn-primary:hover {
@@ -964,7 +970,9 @@ body {
 }
 
 .btn-primary:disabled {
-    opacity: 0.5;
+    opacity: 1;
+    background: #000000;
+    color: #FFFFFF;
     cursor: not-allowed;
     transform: none;
     box-shadow: none;
@@ -983,7 +991,7 @@ body {
 
 .btn-danger {
     background: var(--gradient-danger);
-    color: white;
+    color: var(--bg-primary);
     box-shadow: 0 4px 12px rgba(220, 38, 38, 0.15);
 }
 

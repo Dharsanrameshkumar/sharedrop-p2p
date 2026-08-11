@@ -8,22 +8,22 @@
     <title>ShareDrop — Ephemeral P2P File Sharing</title>
 
     <!-- Favicon (inline SVG as data URI) -->
-    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚡</text></svg>">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M13 2L3 14h9l-1 8 10-12h-9l1-8z'/></svg>">
 
     <!-- Styles -->
-    <link rel="stylesheet" href="css/style.css">
+    <link rel="stylesheet" href="css/style.css?v=7">
+    <style>
+        /* Force black text for inputs to bypass aggressive caching */
+        .room-code-input-group input {
+            color: #000000 !important;
+        }
+    </style>
 </head>
 
 <body>
     <div class="app-container">
 
-        <!-- ═══ Header ═══════════════════════════════════════════ -->
-        <header class="app-header">
-            <a class="app-logo" id="logo-home-link" title="Back to home">
-                <div class="logo-icon">⚡</div>
-                <span class="logo-text">ShareDrop</span>
-            </a>
-        </header>
+
 
         <!-- ═══ Main Content ═════════════════════════════════════ -->
         <main class="app-main">
@@ -39,7 +39,16 @@
             <!-- ── HOME VIEW ─────────────────────────────────── -->
             <section class="view active" id="view-home">
                 <div class="home-hero">
-                    <div class="hero-icon">⚡</div>
+                    <div class="hero-icon">
+                        <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                            <polyline points="14 2 14 8 20 8"></polyline>
+                            <path d="M16 13H8"></path>
+                            <path d="M16 17H8"></path>
+                            <polyline points="10 11 8 13 10 15"></polyline>
+                            <polyline points="14 15 16 17 14 19"></polyline>
+                        </svg>
+                    </div>
                     <h1>
                         Share files<br>
                         <span class="gradient-text">peer-to-peer</span>
@@ -52,12 +61,12 @@
 
                 <div class="action-cards">
                     <div class="action-card send-card" id="btn-go-send" tabindex="0" role="button" aria-label="Send files">
-                        <div class="card-icon">📤</div>
+                        <div class="card-icon"><svg width="28" height="28" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg></div>
                         <h3>Send Files</h3>
                         <p>Select one or more files and get a share code for your receiver</p>
                     </div>
                     <div class="action-card receive-card" id="btn-go-receive" tabindex="0" role="button" aria-label="Receive files">
-                        <div class="card-icon">📥</div>
+                        <div class="card-icon"><svg width="28" height="28" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg></div>
                         <h3>Receive Files</h3>
                         <p>Enter a share code to connect and download</p>
                     </div>
@@ -72,7 +81,7 @@
 
                 <div class="section-header">
                     <h2>Send Files</h2>
-                    <p>Select files to share (max 1 GB each)</p>
+                    <p>Select files to share</p>
                 </div>
 
                 <!-- Steps -->
@@ -95,9 +104,9 @@
 
                 <!-- Step 1: File Selection -->
                 <div class="drop-zone" id="drop-zone">
-                    <div class="drop-icon">📁</div>
+                    <div class="drop-icon"><svg width="48" height="48" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg></div>
                     <div class="drop-text">Drag & drop your files here</div>
-                    <div class="drop-subtext">or <span>click to browse</span> · Max 1 GB per file</div>
+                    <div class="drop-subtext">or <span>click to browse</span></div>
                     <input type="file" id="file-input" multiple>
                 </div>
 
@@ -124,7 +133,7 @@
                     <div class="room-code-label">Share this code with the receiver</div>
                     <div class="room-code-display">
                         <span class="room-code-value" id="room-code-value">—</span>
-                        <button class="btn-copy" id="btn-copy-code" title="Copy code">📋</button>
+                        <button class="btn-copy" id="btn-copy-code" title="Copy code"><svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg></button>
                     </div>
                     <div class="room-code-hint">Waiting for receiver to connect...</div>
                 </div>
@@ -178,7 +187,7 @@
 
                 <!-- Transfer Complete -->
                 <div class="transfer-complete" id="send-complete">
-                    <div class="complete-icon">✓</div>
+                    <div class="complete-icon"><svg width="36" height="36" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg></div>
                     <div class="complete-title">All Files Sent!</div>
                     <div class="complete-subtitle" id="send-complete-subtitle">Your files have been successfully delivered.</div>
                     <button class="btn btn-secondary btn-lg" id="btn-send-another">
@@ -221,7 +230,7 @@
                 <!-- Incoming File Info (batch) -->
                 <div class="file-info" id="incoming-file-info">
                     <div class="incoming-batch-header">
-                        <span class="incoming-batch-icon">📥</span>
+                        <span class="incoming-batch-icon"><svg width="24" height="24" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg></span>
                         <div class="incoming-batch-details">
                             <div class="incoming-batch-title" id="incoming-batch-title">Incoming files</div>
                             <div class="incoming-batch-meta" id="incoming-batch-meta">—</div>
@@ -275,7 +284,7 @@
 
                 <!-- Transfer Complete -->
                 <div class="transfer-complete" id="receive-complete">
-                    <div class="complete-icon">✓</div>
+                    <div class="complete-icon"><svg width="36" height="36" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg></div>
                     <div class="complete-title">All Files Received!</div>
                     <div class="complete-subtitle" id="receive-complete-subtitle">Your download should begin automatically.</div>
                     <div class="integrity-badge" id="integrity-badge">
@@ -283,7 +292,7 @@
                         <span class="integrity-text" id="integrity-text">Verifying integrity...</span>
                     </div>
                     <button class="btn btn-primary btn-lg" id="btn-download-all" style="margin-bottom: var(--space-md);">
-                        💾 Download All Files
+                        <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg> Download All Files
                     </button>
                     <br>
                     <button class="btn btn-secondary btn-lg" id="btn-receive-another">
